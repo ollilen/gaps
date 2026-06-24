@@ -58,6 +58,12 @@ src/
 - No default exports
 - Use named exports consistently
 
+## Git Workflow
+- Never push directly to `main` — always create a feature branch and open a PR
+- Branch naming: `feat/short-description`, `fix/short-description`, `chore/short-description`
+- CI runs typecheck, tests, and build on every PR — all must pass before merge
+- main is protected; merges only via approved PRs
+
 ## Tooling Conventions
 - Use a linter (ESLint) and formatter (Prettier) — enforce via CI
 - Type-check with `tsc --noEmit` in CI
