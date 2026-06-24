@@ -24,6 +24,6 @@ new maplibregl.Map({
       },
     ],
   },
-  center: [0, 20],
-  zoom: 2,
+  center: [18.0686, 59.3293],
+  zoom: 11,
 })
