@@ -1,13 +1,13 @@
-import { Map, type ExpressionSpecification } from 'maplibre-gl'
+import { Map as MapLibreMap, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FeatureCollection } from 'geojson'
 import { stockholmMunicipalityColors, type MunicipalityColorMap } from './domain/municipality'
 import { partyColors, type PartyCode } from './domain/election'
 import type { LayerToggle } from './domain/layerToggle'
 import { fetchStockholmMunicipalities } from './infrastructure/municipalities'
-import { fetchVotingDistricts } from './infrastructure/votingDistricts'
+import { fetchVotingDistricts, votingDistrictYears, type VotingDistrictYear } from './infrastructure/votingDistricts'
 import { MapControlsPanel } from './interface/mapControlsPanel'
-import { PartyLegend } from './interface/partyLegend'
+import { buildPartyLegend } from './interface/partyLegend'
 import './interface/mapControlsPanel.css'
 import './interface/partyLegend.css'
 
@@ -36,7 +36,7 @@ const municipalitiesToggle: LayerToggle = {
 
 const votingDistrictsToggle: LayerToggle = {
   id: 'voting-districts',
-  label: 'Voting districts 2022',
+  label: 'Voting districts',
   layerIds: ['voting-districts-fill', 'voting-districts-border'],
   defaultVisibility: 'none',
 }
@@ -46,7 +46,7 @@ const legendPartyCodes: readonly PartyCode[] = ['S', 'M', 'SD', 'C', 'V', 'KD', 
 const container = document.getElementById('map')
 if (!container) throw new Error('Map container #map not found')
 
-const map = new Map({
+const map = new MapLibreMap({
   container,
   style: {
     version: 8,
@@ -70,8 +70,53 @@ const map = new Map({
   zoom: 11,
 })
 
-map.addControl(new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle]), 'top-right')
-map.addControl(new PartyLegend(legendPartyCodes), 'bottom-right')
+const loadVotingDistricts = (year: VotingDistrictYear): void => {
+  void fetchVotingDistricts(year)
+    .run()
+    .then(result =>
+      result.caseOf({
+        Left: err => console.error(`[voting-districts] ${err.message}`),
+        Right: geojson => {
+          const source = map.getSource('voting-districts') as GeoJSONSource | undefined
+          source?.setData(geojson as unknown as FeatureCollection)
+        },
+      }),
+    )
+}
+
+const buildVotingDistrictsSubPanel = (): HTMLElement => {
+  const panel = document.createElement('div')
+  panel.className = 'map-controls-panel__sub-panel'
+
+  const yearRow = document.createElement('div')
+  yearRow.className = 'map-controls-panel__sub-panel-row'
+
+  const yearLabel = document.createElement('label')
+  yearLabel.textContent = 'Year'
+
+  const yearSelect = document.createElement('select')
+  yearSelect.className = 'map-controls-panel__year-select'
+  votingDistrictYears.forEach(year => {
+    const option = document.createElement('option')
+    option.value = String(year)
+    option.textContent = String(year)
+    yearSelect.appendChild(option)
+  })
+  yearSelect.addEventListener('change', () => {
+    loadVotingDistricts(Number(yearSelect.value) as VotingDistrictYear)
+  })
+
+  yearRow.appendChild(yearLabel)
+  yearRow.appendChild(yearSelect)
+  panel.appendChild(yearRow)
+  panel.appendChild(buildPartyLegend(legendPartyCodes))
+
+  return panel
+}
+
+const subPanels = new Map([[votingDistrictsToggle.id, buildVotingDistrictsSubPanel()]])
+
+map.addControl(new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels), 'top-right')
 
 map.on('load', () => {
   void fetchStockholmMunicipalities()
@@ -107,31 +152,36 @@ map.on('load', () => {
       }),
     )
 
-  void fetchVotingDistricts()
-    .then(geojson => {
-      map.addSource('voting-districts', { type: 'geojson', data: geojson as unknown as FeatureCollection })
+  void fetchVotingDistricts(votingDistrictYears[0])
+    .run()
+    .then(result =>
+      result.caseOf({
+        Left: err => console.error(`[voting-districts] ${err.message}`),
+        Right: geojson => {
+          map.addSource('voting-districts', { type: 'geojson', data: geojson as unknown as FeatureCollection })
 
-      map.addLayer({
-        id: 'voting-districts-fill',
-        type: 'fill',
-        source: 'voting-districts',
-        layout: { visibility: votingDistrictsToggle.defaultVisibility },
-        paint: {
-          'fill-color': buildPartyColorExpression(),
-          'fill-opacity': 0.65,
-        },
-      })
+          map.addLayer({
+            id: 'voting-districts-fill',
+            type: 'fill',
+            source: 'voting-districts',
+            layout: { visibility: votingDistrictsToggle.defaultVisibility },
+            paint: {
+              'fill-color': buildPartyColorExpression(),
+              'fill-opacity': 0.65,
+            },
+          })
 
-      map.addLayer({
-        id: 'voting-districts-border',
-        type: 'line',
-        source: 'voting-districts',
-        layout: { visibility: votingDistrictsToggle.defaultVisibility },
-        paint: {
-          'line-color': '#ffffff',
-          'line-width': 0.5,
+          map.addLayer({
+            id: 'voting-districts-border',
+            type: 'line',
+            source: 'voting-districts',
+            layout: { visibility: votingDistrictsToggle.defaultVisibility },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 0.5,
+            },
+          })
         },
-      })
-    })
-    .catch((err: unknown) => console.error(`[voting-districts] ${err instanceof Error ? err.message : String(err)}`))
+      }),
+    )
 })

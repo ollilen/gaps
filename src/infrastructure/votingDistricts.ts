@@ -1,4 +1,9 @@
+import { EitherAsync } from 'purify-ts/EitherAsync'
+import { Left } from 'purify-ts/Either'
 import type { PartyCode } from '../domain/election'
+
+export const votingDistrictYears = [2022] as const
+export type VotingDistrictYear = (typeof votingDistrictYears)[number]
 
 type VotingDistrictProperties = {
   readonly districtCode: string
@@ -20,10 +25,20 @@ export type VotingDistrictFeatureCollection = {
   readonly features: readonly VotingDistrictFeature[]
 }
 
-// Source: Valmyndigheten, 2022 Riksdag election results per voting district.
+type FetchError = { readonly kind: 'FetchError'; readonly message: string }
+
+// Source: Valmyndigheten, election results per voting district.
 // Pre-processed from XLSX + boundary JSON at build time; bundled as a static asset.
-export const fetchVotingDistricts = async (): Promise<VotingDistrictFeatureCollection> => {
-  const res = await fetch('/voting-districts-2022.geojson')
-  if (!res.ok) throw new Error(`Failed to load voting districts: ${res.status}`)
-  return res.json() as Promise<VotingDistrictFeatureCollection>
-}
+export const fetchVotingDistricts = (year: VotingDistrictYear): EitherAsync<FetchError, VotingDistrictFeatureCollection> =>
+  EitherAsync(async ({ liftEither }) => {
+    const res = await fetch(`/voting-districts-${year}.geojson`)
+    if (!res.ok) {
+      return liftEither(
+        Left<FetchError, VotingDistrictFeatureCollection>({
+          kind: 'FetchError',
+          message: `Failed to load voting districts: ${res.status}`,
+        }),
+      )
+    }
+    return res.json() as Promise<VotingDistrictFeatureCollection>
+  })
