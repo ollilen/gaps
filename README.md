@@ -16,31 +16,74 @@ The codebase follows functional programming and Domain-Driven Design principles:
 
 | Status | Feature |
 |--------|---------|
-| Done | **Stockholm municipalities on the map** — all municipalities rendered as a fill layer, with a toggle control to show/hide the boundaries |
-| Planned | **Voting districts colored by party** — overlay voting districts (valdistrikt) and color each by the dominant party in the most recent election; legend with official party colors |
-| Planned | **Demographic similarity** — click an area and highlight other areas across Stockholm with the most similar demographic profile (SCB data, statistical area level) |
+| Done | **Stockholm municipalities** — all municipalities in Stockholm county rendered as a fill layer with hover tooltips |
+| Done | **Voting districts colored by party** — overlay voting districts (valdistrikt) colored by dominant party for riksdag elections 2010–2022; party legend, year selector, and hover tooltips |
+| Done | **Demographic similarity** — click a DeSO statistical area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 5 matches with relative similarity scores |
 
-## Ideas & upcoming features
+## Data sources
 
-### 1. Voting areas colored by party
+### Live (fetched at runtime)
 
-Overlay Stockholm's voting districts on the map and color each district by the dominant party in the most recent election. This would make it easy to see political geography at a glance — where different parties have their strongholds across the city.
+| Source | What is fetched |
+|--------|----------------|
+| **OpenStreetMap** `tile.openstreetmap.org` | Raster base map tiles — PNG tiles at any zoom level, rendered as the background layer by MapLibre GL |
+| **OpenDataSoft — georef-sweden-kommun** `public.opendatasoft.com` | Municipality boundary polygons for Stockholm county (26 municipalities); fields: `kom_code`, `kom_name`, `geo_shape`. Boundaries sourced from Lantmäteriet |
 
-Sketch:
-- Source data: Valmyndigheten publishes election results per voting district as open data
-- Each district gets a fill color mapped to the party with the most votes
-- A legend shows the party–color mapping (using the parties' official colors)
-- Toggle control to switch between the municipal layer and the voting district layer
+### Build-time (pre-processed into static GeoJSON, bundled under `public/`)
 
-### 2. Demographic similarity — click an area, find its twins
+These sources are queried by scripts in `scripts/` and the output is committed as static assets. Re-run the scripts to refresh the data.
 
-Click on a smaller area (city district / statistical area level — think Hagsätra/Rågsved or Kista) and the map highlights other areas across Stockholm that have the most similar demographic profile.
+#### Valmyndigheten (Swedish Election Authority) — `historik.val.se`
 
-Sketch:
-- Source data: SCB publishes demographic statistics at statistical area (SAMS-område) level (age, income, foreign background, housing type, etc.)
-- On click, compute a similarity score between the selected area and all others (e.g. cosine similarity or Euclidean distance over normalized features)
-- Highlight the top N most similar areas with a gradient fill; de-emphasize the rest
-- A side panel lists the matched areas with the key shared characteristics
+Produces `public/voting-districts-{year}.geojson` for 2010, 2014, 2018, and 2022.
+
+| Asset | What is fetched |
+|-------|----------------|
+| Election results (XLSX / SKV) | Vote counts per party per voting district for riksdag elections — used to determine the dominant party in each district |
+| Boundary shapefiles (ZIP) | Voting district polygons in SWEREF99TM projection — reprojected to WGS84 at build time |
+
+Script: `scripts/generate-voting-districts.mjs`
+
+#### SCB GeoServer WFS — `geodata.scb.se/geoserver/stat/wfs`
+
+| Layer | What is fetched |
+|-------|----------------|
+| `stat:DeSO_2018` | 544 DeSO statistical area boundaries for Stockholm stad (`kommunkod='0180'`) in SWEREF99TM — reprojected to WGS84 |
+| `stat:RegSO_2020` | 127 RegSO area boundaries for Stockholm stad — used only to join human-readable area names (`regsonamn`) to their DeSO sub-areas via `regsokod` |
+
+DeSO (Demografiska statistikområden) is SCB's current small-area statistical unit, introduced in 2018 to replace SAMS. DeSO 2018 codes were retired when DeSO 2025 launched; all demographic queries therefore use year 2023.
+
+#### SCB PxWeb API v1 — `api.scb.se/OV0104/v1/doris/sv/ssd`
+
+All queries use DeSO 2018 codes, year 2023, filtered to the 544 Stockholm stad areas. Returns json-stat2 format.
+
+| Table | What is fetched | Used for |
+|-------|----------------|----------|
+| `BE/BE0101/BE0101Y/FolkmDesoAldKon` | Population by DeSO area, age bracket, and sex | Age group shares: 0–17, 18–29, 30–44, 45–64, 65+ |
+| `HE/HE0110/HE0110I/Tab2InkDesoRegso` | Income components by DeSO area — component 240 (nettoinkomst), mean for all | Mean net income per person |
+| `BE/BE0101/BE0101Y/FolkmDesoBakgrKon` | Population by DeSO area and foreign background | Share of residents with foreign background |
+| `BO/BO0104/BO0104D/BO0104T10N` | Housing units by DeSO area and tenure type | Shares of rental, co-op owned (bostadsrätt), and owned house |
+| `BE/BE0101/BE0101Y/HushallDesoTyp` | Households by DeSO area and type | Shares of single-person households and households with children |
+
+Each table contributes one or more dimensions to an 11-component feature vector per area:
+
+| Component | Dimension | Source table |
+|-----------|-----------|-------------|
+| `fv0` | Share of population aged 0–17 | `FolkmDesoAldKon` |
+| `fv1` | Share of population aged 18–29 | `FolkmDesoAldKon` |
+| `fv2` | Share of population aged 30–44 | `FolkmDesoAldKon` |
+| `fv3` | Share of population aged 45–64 | `FolkmDesoAldKon` |
+| `fv4` | Share of population aged 65+ | `FolkmDesoAldKon` |
+| `fv5` | Mean net income per person | `Tab2InkDesoRegso` |
+| `fv6` | Share of residents with foreign background | `FolkmDesoBakgrKon` |
+| `fv7` | Share of housing that is rental (hyresrätt) | `BO0104T10N` |
+| `fv8` | Share of housing that is co-op owned (bostadsrätt) | `BO0104T10N` |
+| `fv9` | Share of households that are single-person | `HushallDesoTyp` |
+| `fv10` | Share of households with children (couple or single parent) | `HushallDesoTyp` |
+
+`BO0104T10N` also fetches the owned-house (äganderätt) share, but it is not included in the vector because the three tenure shares always sum to 1 — adding it would be redundant. Each dimension is min-max normalized independently across all 544 areas before similarity is computed. Similarity between two areas is the Euclidean similarity in this 11-dimensional normalized space: `1 − distance / √11`.
+
+Script: `scripts/buildStatisticalAreas.mjs`
 
 ---
 
@@ -62,4 +105,14 @@ npm run typecheck # type-check only
 
 ```sh
 npm run build
+```
+
+## Rebuilding data assets
+
+```sh
+# Voting districts (2010, 2014, 2018) — downloads from historik.val.se
+node scripts/generate-voting-districts.mjs
+
+# Demographic similarity data — queries SCB WFS and PxWeb APIs
+node scripts/buildStatisticalAreas.mjs
 ```
