@@ -13,3 +13,30 @@
   gap: 6px;
   cursor: pointer;
 }
+
+.map-controls-panel__sub-panel {
+  margin-top: 2px;
+  margin-left: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 12px;
+}
+
+.map-controls-panel__sub-panel--hidden {
+  display: none;
+}
+
+.map-controls-panel__sub-panel-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.map-controls-panel__year-select {
+  font: 12px system-ui, sans-serif;
+  border: 1px solid #ccc;
+  border-radius: 3px;
+  padding: 2px 4px;
+  cursor: pointer;
+}

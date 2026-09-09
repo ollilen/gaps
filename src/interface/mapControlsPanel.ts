@@ -8,12 +8,14 @@ const applyVisibility = (map: MapLibreMap, toggle: LayerToggle, visibility: Visi
 
 export class MapControlsPanel implements IControl {
   private readonly toggles: readonly LayerToggle[]
+  private readonly subPanels: ReadonlyMap<string, HTMLElement>
   private container: Maybe<HTMLElement> = Nothing
   private map: Maybe<MapLibreMap> = Nothing
   private state: Record<string, Visibility>
 
-  constructor(toggles: readonly LayerToggle[]) {
+  constructor(toggles: readonly LayerToggle[], subPanels: ReadonlyMap<string, HTMLElement> = new Map()) {
     this.toggles = toggles
+    this.subPanels = subPanels
     this.state = Object.fromEntries(toggles.map(toggle => [toggle.id, toggle.defaultVisibility]))
   }
 
@@ -24,7 +26,16 @@ export class MapControlsPanel implements IControl {
     container.className = 'maplibregl-ctrl maplibregl-ctrl-group map-controls-panel'
 
     this.toggles.forEach(toggle => {
-      container.appendChild(this.buildToggleRow(toggle))
+      const subPanel = this.subPanels.get(toggle.id)
+      if (subPanel) {
+        subPanel.classList.toggle('map-controls-panel__sub-panel--hidden', toggle.defaultVisibility !== 'visible')
+        const group = document.createElement('div')
+        group.appendChild(this.buildToggleRow(toggle))
+        group.appendChild(subPanel)
+        container.appendChild(group)
+      } else {
+        container.appendChild(this.buildToggleRow(toggle))
+      }
     })
 
     this.container = Just(container)
@@ -59,6 +70,11 @@ export class MapControlsPanel implements IControl {
       const next = toggleVisibility(this.state[toggle.id] ?? toggle.defaultVisibility)
       this.state = { ...this.state, [toggle.id]: next }
       applyVisibility(m, toggle, next)
+
+      const subPanel = this.subPanels.get(toggle.id)
+      if (subPanel) {
+        subPanel.classList.toggle('map-controls-panel__sub-panel--hidden', next !== 'visible')
+      }
     })
   }
 }
