@@ -1,4 +1,4 @@
-import { Map as MapLibreMap, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
+import { Map as MapLibreMap, Popup, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import type { FeatureCollection } from 'geojson'
 import { stockholmMunicipalityColors, type MunicipalityColorMap } from './domain/municipality'
@@ -116,7 +116,9 @@ const buildVotingDistrictsSubPanel = (): HTMLElement => {
 
 const subPanels = new Map([[votingDistrictsToggle.id, buildVotingDistrictsSubPanel()]])
 
-map.addControl(new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels), 'top-right')
+map.addControl(new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels, 'radio'), 'top-right')
+
+const tooltip = new Popup({ closeButton: false, closeOnClick: false })
 
 map.on('load', () => {
   void fetchStockholmMunicipalities()
@@ -147,6 +149,17 @@ map.on('load', () => {
               'line-color': '#ffffff',
               'line-width': 1.5,
             },
+          })
+
+          map.on('mousemove', 'municipalities-fill', e => {
+            const name = e.features?.[0]?.properties?.municipalityName as string | undefined
+            if (!name) return
+            map.getCanvas().style.cursor = 'pointer'
+            tooltip.setLngLat(e.lngLat).setText(name).addTo(map)
+          })
+          map.on('mouseleave', 'municipalities-fill', () => {
+            map.getCanvas().style.cursor = ''
+            tooltip.remove()
           })
         },
       }),
@@ -180,6 +193,17 @@ map.on('load', () => {
               'line-color': '#ffffff',
               'line-width': 0.5,
             },
+          })
+
+          map.on('mousemove', 'voting-districts-fill', e => {
+            const name = e.features?.[0]?.properties?.districtName as string | undefined
+            if (!name) return
+            map.getCanvas().style.cursor = 'pointer'
+            tooltip.setLngLat(e.lngLat).setText(name).addTo(map)
+          })
+          map.on('mouseleave', 'voting-districts-fill', () => {
+            map.getCanvas().style.cursor = ''
+            tooltip.remove()
           })
         },
       }),
