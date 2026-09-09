@@ -20,6 +20,7 @@ export type MunicipalityFeatureCollection = {
   readonly features: readonly MunicipalityFeature[]
 }
 
+// Field names mirror the OpenDataSoft API response (dataset: georef-sweden-kommun).
 type ApiRecord = {
   readonly kom_code: readonly string[]
   readonly kom_name: readonly string[]

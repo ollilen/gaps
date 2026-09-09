@@ -1,6 +1,6 @@
-export type KommunKod = string
+export type MunicipalityCode = string
 export type HexColor = `#${string}`
-export type MunicipalityColorMap = Readonly<Record<KommunKod, HexColor>>
+export type MunicipalityColorMap = Readonly<Record<MunicipalityCode, HexColor>>
 
 export const stockholmMunicipalityColors: MunicipalityColorMap = {
   '0114': '#4e79a7', // Upplands Väsby
