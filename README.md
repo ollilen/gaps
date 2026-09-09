@@ -2,8 +2,6 @@
 
 An interactive map for exploring geographic and demographic gaps in Stockholm.
 
-Currently shows Stockholm's municipalities (kommuner) rendered on a MapLibre GL map, with a toggle control to show/hide the municipal boundaries layer.
-
 ## Tech stack
 
 - **TypeScript** — strict, no `any`
@@ -13,6 +11,14 @@ Currently shows Stockholm's municipalities (kommuner) rendered on a MapLibre GL 
 - **Vitest** — unit tests
 
 The codebase follows functional programming and Domain-Driven Design principles: pure functions, immutable data, errors as values (never thrown), and code organised by domain rather than technical layer.
+
+## Features
+
+| Status | Feature |
+|--------|---------|
+| Done | **Stockholm municipalities on the map** — all kommuner rendered as a fill layer, with a toggle control to show/hide the boundaries |
+| Planned | **Voting districts colored by party** — overlay valdistrikt and color each by the dominant party in the most recent election; legend with official party colors |
+| Planned | **Demographic similarity** — click an area and highlight other areas across Stockholm with the most similar demographic profile (SCB data, SAMS-område level) |
 
 ## Ideas & upcoming features
 
