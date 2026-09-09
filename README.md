@@ -4,6 +4,16 @@ An interactive map for exploring geographic and demographic gaps in Stockholm.
 
 Currently shows Stockholm's municipalities (kommuner) rendered on a MapLibre GL map, with a toggle control to show/hide the municipal boundaries layer.
 
+## Tech stack
+
+- **TypeScript** — strict, no `any`
+- **MapLibre GL** — open-source map renderer
+- **purify-ts** — functional programming primitives (`Maybe`, `Either`, `EitherAsync`)
+- **Vite** — dev server and bundler
+- **Vitest** — unit tests
+
+The codebase follows functional programming and Domain-Driven Design principles: pure functions, immutable data, errors as values (never thrown), and code organised by domain rather than technical layer.
+
 ## Ideas & upcoming features
 
 ### 1. Voting areas colored by party
