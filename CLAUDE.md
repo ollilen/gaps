@@ -76,6 +76,19 @@ src/
 - When adding or upgrading a package, verify all peer dependencies remain compatible before committing
 - After any version change: run `npm install`, `tsc --noEmit`, and `npm test` to confirm nothing broke
 
+## Language
+- All code must be in English: variable names, function names, file names, type names, layer IDs, source keys, property names
+- This applies even when domain concepts are discussed in Swedish — translate to English in code (e.g. "kommuner" → "municipalities")
+
+## Commit Messages
+- Use Conventional Commits: `type(scope): summary`
+- Summary: imperative, lowercase, no trailing period, <=72 chars
+- Types: feat, fix, chore, refactor, test, docs, ci, style, perf
+- Scope optional, e.g. `feat(map): color municipalities by kommun code`
+- Body (optional): explain why, not what; wrap at 72 chars
+- Breaking change: `!` after type/scope, plus a `BREAKING CHANGE:` footer
+- One logical change per commit
+
 ## What to Avoid
 - Mutable global state
 - God objects / god functions
