@@ -51,34 +51,37 @@ const map = new Map({
 
 map.addControl(new MapControlsPanel([municipalitiesToggle]), 'top-right')
 
-map.on('load', async () => {
-  const geojson = await fetchStockholmMunicipalities()
+map.on('load', () => {
+  void fetchStockholmMunicipalities()
+    .run()
+    .then(result =>
+      result.caseOf({
+        Left: err => console.error(`[municipalities] ${err.message}`),
+        Right: geojson => {
+          map.addSource('municipalities', { type: 'geojson', data: geojson as unknown as FeatureCollection })
 
-  map.addSource('municipalities', { type: 'geojson', data: geojson as unknown as FeatureCollection })
+          map.addLayer({
+            id: 'municipalities-fill',
+            type: 'fill',
+            source: 'municipalities',
+            layout: { visibility: municipalitiesToggle.defaultVisibility },
+            paint: {
+              'fill-color': buildColorExpression(stockholmMunicipalityColors),
+              'fill-opacity': 0.45,
+            },
+          })
 
-  map.addLayer({
-    id: 'municipalities-fill',
-    type: 'fill',
-    source: 'municipalities',
-    layout: {
-      visibility: municipalitiesToggle.defaultVisibility,
-    },
-    paint: {
-      'fill-color': buildColorExpression(stockholmMunicipalityColors),
-      'fill-opacity': 0.45,
-    },
-  })
-
-  map.addLayer({
-    id: 'municipalities-border',
-    type: 'line',
-    source: 'municipalities',
-    layout: {
-      visibility: municipalitiesToggle.defaultVisibility,
-    },
-    paint: {
-      'line-color': '#ffffff',
-      'line-width': 1.5,
-    },
-  })
+          map.addLayer({
+            id: 'municipalities-border',
+            type: 'line',
+            source: 'municipalities',
+            layout: { visibility: municipalitiesToggle.defaultVisibility },
+            paint: {
+              'line-color': '#ffffff',
+              'line-width': 1.5,
+            },
+          })
+        },
+      }),
+    )
 })
