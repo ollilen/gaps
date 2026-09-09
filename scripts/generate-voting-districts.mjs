@@ -13,8 +13,8 @@ import { writeFileSync, mkdtempSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, dirname } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import AdmZip from 'adm-zip'
-import * as XLSX from 'xlsx'
+import { unzipSync } from 'fflate'
+import readXlsxFile from 'read-excel-file/node'
 import proj4 from 'proj4'
 import shapefile from 'shapefile'
 
@@ -30,54 +30,46 @@ const reprojectCoords = (coords) => {
   return coords.map(reprojectCoords)
 }
 
-// Party codes we track; all others → 'OTHER'
 const PARTY_CODES = new Set(['S', 'M', 'SD', 'C', 'V', 'KD', 'L', 'MP'])
 // FP (Folkpartiet) became L (Liberalerna) in 2015
 const PARTY_ALIASES = { FP: 'L' }
-const normalizeParty = (raw) => {
-  const upper = String(raw).trim().toUpperCase()
-  return PARTY_ALIASES[upper] ?? upper
-}
+const normalizeParty = (raw) => PARTY_ALIASES[String(raw).trim().toUpperCase()] ?? String(raw).trim().toUpperCase()
 
 const pad = (n, len) => String(n).padStart(len, '0')
-const buildVD = (lan, kom, valdist) => pad(lan, 2) + pad(kom, 2) + pad(valdist, 4)
 
 // ── Per-year configuration ───────────────────────────────────────────────────
 
 const YEAR_CONFIGS = {
   2018: {
     resultsUrl: 'https://historik.val.se/val/val2018/statistik/2018_R_per_valdistrikt.xlsx',
+    resultsFormat: 'xlsx',
+    resultsSheet: 'R antal',
     boundariesUrl: 'https://historik.val.se/val/val2018/statistik/2018_valgeografi_valdistrikt.zip',
-    sheetName: 'R antal',
-    headerRow: 0,
+    // Columns in the XLSX header row (row 0)
     lanCol: 'LÄNSKOD',
     komCol: 'KOMMUNKOD',
     valdistCol: 'VALDISTRIKTSKOD',
     nameCol: 'VALDISTRIKTSNAMN',
-    // Party columns are bare abbreviations: "M", "C", "L", "S", …
-    partyColSuffix: '',
+    partyColSuffix: '',      // party columns are bare: "M", "S", "SD", …
     codeField: 'VD',
     nameField: 'VD_NAMN',
   },
   2014: {
-    resultsUrl: 'https://historik.val.se/val/val2014/statistik/2014_riksdagsval_per_valdistrikt.xls',
+    resultsUrl: 'https://historik.val.se/val/val2014/statistik/2014_riksdagsval_per_valdistrikt.skv',
+    resultsFormat: 'skv',
     boundariesUrl: 'https://historik.val.se/val/val2014/statistik/gis/valgeografi_valdistrikt.zip',
-    sheetName: null,
-    headerRow: 2,
     lanCol: 'LAN',
     komCol: 'KOM',
     valdistCol: 'VALDIST',
     nameCol: 'Valdistrikt',
-    // Party columns have " tal" suffix: "M tal", "FP tal", …
-    partyColSuffix: ' tal',
+    partyColSuffix: ' tal',  // "M tal", "FP tal", …
     codeField: 'VD',
     nameField: 'VD_NAMN',
   },
   2010: {
-    resultsUrl: 'https://historik.val.se/val/val2010/statistik/slutligt_valresultat_valdistrikt_R.xls',
+    resultsUrl: 'https://historik.val.se/val/val2010/statistik/slutligt_valresultat_valdistrikt_R.skv',
+    resultsFormat: 'skv',
     boundariesUrl: 'https://historik.val.se/val/val2010/statistik/gis/alla_valdistrikt.zip',
-    sheetName: null,
-    headerRow: 0,
     lanCol: 'LAN',
     komCol: 'KOM',
     valdistCol: 'VALDIST',
@@ -91,7 +83,7 @@ const YEAR_CONFIGS = {
 // ── Utilities ────────────────────────────────────────────────────────────────
 
 const download = async (url) => {
-  process.stdout.write(`  DL ${url.split('/').slice(-1)[0]} ... `)
+  process.stdout.write(`  DL ${url.split('/').pop()} ... `)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   const buf = Buffer.from(await res.arrayBuffer())
@@ -101,14 +93,69 @@ const download = async (url) => {
 
 // ── Results parsing ──────────────────────────────────────────────────────────
 
-const parseResults = (buffer, config) => {
-  const wb = XLSX.read(buffer, { type: 'buffer' })
-  const ws = wb.Sheets[config.sheetName ?? wb.SheetNames[0]]
-  const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' })
-  const headers = rows[config.headerRow].map(String)
+// Returns Map<vdCode, dominantParty> from a semicolon-separated SKV file.
+// Valmyndigheten SKV files are Windows-1252 encoded; codes are already zero-padded.
+const parseSKV = (buffer, config) => {
+  const text = new TextDecoder('windows-1252').decode(buffer)
+  const lines = text.split(/\r?\n/).filter(l => l.trim())
+  const headers = lines[0].split(';')
 
   const colIdx = (name) => {
-    const i = headers.findIndex(h => h === name)
+    const i = headers.indexOf(name)
+    if (i === -1) throw new Error(`Column "${name}" not found. Headers: ${headers.join(';')}`)
+    return i
+  }
+
+  const lanCol = colIdx(config.lanCol)
+  const komCol = colIdx(config.komCol)
+  const valdistCol = colIdx(config.valdistCol)
+
+  const partyColMap = {}
+  const suffix = config.partyColSuffix
+  headers.forEach((h, i) => {
+    if (suffix && !h.endsWith(suffix)) return
+    const raw = suffix ? h.slice(0, h.length - suffix.length) : h
+    const norm = normalizeParty(raw)
+    if (PARTY_CODES.has(norm)) partyColMap[norm] = i
+  })
+  console.log(`  Party cols: ${JSON.stringify(partyColMap)}`)
+
+  const results = new Map()
+  for (let i = 1; i < lines.length; i++) {
+    const cells = lines[i].split(';')
+    const lan = cells[lanCol]?.trim()
+    const kom = cells[komCol]?.trim()
+    const valdist = cells[valdistCol]?.trim()
+    if (!lan || !kom || !valdist) continue
+
+    // Codes are already zero-padded in SKV; concatenate directly
+    const vd = lan + kom + valdist
+
+    let dominant = 'OTHER'
+    let maxVotes = -1
+    for (const [party, col] of Object.entries(partyColMap)) {
+      // Numbers use comma as decimal separator — replace before parsing
+      const votes = Number(cells[col]?.replace(',', '.') ?? 0)
+      if (votes > maxVotes) { maxVotes = votes; dominant = party }
+    }
+    results.set(vd, dominant)
+  }
+
+  console.log(`  Parsed ${results.size} district results`)
+  return results
+}
+
+// Returns Map<vdCode, dominantParty> from a 2018-style XLSX file.
+const parseXLSX = async (buffer, config) => {
+  // read-excel-file returns [{sheet, data}] for all sheets; find the target.
+  const allSheets = await readXlsxFile(buffer)
+  const sheetObj = allSheets.find(s => s.sheet === config.resultsSheet)
+  if (!sheetObj) throw new Error(`Sheet "${config.resultsSheet}" not found. Available: ${allSheets.map(s => s.sheet).join(', ')}`)
+  const rows = sheetObj.data
+  const headers = rows[0].map(String)
+
+  const colIdx = (name) => {
+    const i = headers.indexOf(name)
     if (i === -1) throw new Error(`Column "${name}" not found. Headers: ${headers.join(' | ')}`)
     return i
   }
@@ -117,26 +164,24 @@ const parseResults = (buffer, config) => {
   const komCol = colIdx(config.komCol)
   const valdistCol = colIdx(config.valdistCol)
 
-  // Find party vote columns: exact match (2018) or "{PARTY}{suffix}" (2014/2010)
-  const partyColMap = {} // normalizedPartyCode → colIndex
-  const suffix = config.partyColSuffix
+  const partyColMap = {}
   headers.forEach((h, i) => {
-    const raw = suffix ? h.slice(0, h.length - suffix.length) : h
-    if (suffix && !h.endsWith(suffix)) return
-    const norm = normalizeParty(raw)
+    const norm = normalizeParty(h)
     if (PARTY_CODES.has(norm)) partyColMap[norm] = i
   })
-  console.log(`  Party cols: ${JSON.stringify(Object.fromEntries(Object.entries(partyColMap).map(([p, i]) => [p, headers[i]])))  }`)
+  console.log(`  Party cols: ${JSON.stringify(partyColMap)}`)
 
   const results = new Map()
-  for (let i = config.headerRow + 1; i < rows.length; i++) {
+  for (let i = 1; i < rows.length; i++) {
     const row = rows[i]
     const lan = row[lanCol]
     const kom = row[komCol]
     const valdist = row[valdistCol]
-    if (!lan || !kom || !valdist) continue
+    if (lan == null || kom == null || valdist == null) continue
 
-    const vd = buildVD(lan, kom, valdist)
+    // XLSX values are numbers; pad to match boundary VD codes
+    const vd = pad(lan, 2) + pad(kom, 2) + pad(valdist, 4)
+
     let dominant = 'OTHER'
     let maxVotes = -1
     for (const [party, col] of Object.entries(partyColMap)) {
@@ -150,23 +195,25 @@ const parseResults = (buffer, config) => {
   return results
 }
 
+const parseResults = async (buffer, config) =>
+  config.resultsFormat === 'xlsx' ? parseXLSX(buffer, config) : parseSKV(buffer, config)
+
 // ── Boundary loading ─────────────────────────────────────────────────────────
 
 const loadBoundaries = async (zipBuffer, config) => {
-  const zip = new AdmZip(zipBuffer)
-  const entries = zip.getEntries()
+  const files = unzipSync(new Uint8Array(zipBuffer))
 
-  const shpEntry = entries.find(e => e.entryName.toLowerCase().endsWith('.shp'))
-  const dbfEntry = entries.find(e => e.entryName.toLowerCase().endsWith('.dbf'))
-  if (!shpEntry || !dbfEntry) {
-    throw new Error('SHP/DBF not found in ZIP. Entries: ' + entries.map(e => e.entryName).join(', '))
+  const shpKey = Object.keys(files).find(k => k.toLowerCase().endsWith('.shp'))
+  const dbfKey = Object.keys(files).find(k => k.toLowerCase().endsWith('.dbf'))
+  if (!shpKey || !dbfKey) {
+    throw new Error('SHP/DBF not found in ZIP. Files: ' + Object.keys(files).join(', '))
   }
-  console.log(`  Shapefile: ${shpEntry.entryName}`)
+  console.log(`  Shapefile: ${shpKey}`)
 
   const tmpDir = mkdtempSync(join(tmpdir(), 'vd-'))
   try {
-    writeFileSync(join(tmpDir, 'data.shp'), shpEntry.getData())
-    writeFileSync(join(tmpDir, 'data.dbf'), dbfEntry.getData())
+    writeFileSync(join(tmpDir, 'data.shp'), Buffer.from(files[shpKey]))
+    writeFileSync(join(tmpDir, 'data.dbf'), Buffer.from(files[dbfKey]))
     const col = await shapefile.read(join(tmpDir, 'data.shp'), join(tmpDir, 'data.dbf'), { encoding: 'UTF-8' })
     console.log(`  ${col.features.length} boundary features`)
     return col.features
@@ -186,7 +233,7 @@ const processYear = async (year) => {
     download(config.boundariesUrl),
   ])
 
-  const districtResults = parseResults(resultsBuf, config)
+  const districtResults = await parseResults(resultsBuf, config)
   const rawFeatures = await loadBoundaries(boundariesBuf, config)
 
   let matched = 0
@@ -216,7 +263,6 @@ const processYear = async (year) => {
 
   console.log(`  Join: matched=${matched} unmatched=${unmatched}`)
 
-  // Keep only Stockholm county (VD codes starting with "01")
   const stockholmFeatures = allFeatures.filter(f => f.properties.districtCode.startsWith('01'))
   console.log(`  Stockholm: ${stockholmFeatures.length} districts`)
 

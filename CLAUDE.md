@@ -97,6 +97,12 @@ src/
 - When adding or upgrading a package, verify all peer dependencies remain compatible before committing
 - After any version change: run `npm install`, `tsc --noEmit`, and `npm test` to confirm nothing broke
 
+## Dependency Security
+- Run `npm audit` after every `npm install` and before every commit that touches `package.json`
+- Do not add a package that introduces vulnerabilities — find a safer alternative first
+- If no safe alternative exists, stop and discuss the trade-off with the user before committing
+- This applies to devDependencies too — scripts run on developer machines and CI
+
 ## Language
 - All code must be in English: variable names, function names, file names, type names, layer IDs, source keys, property names
 - This applies even when domain concepts are discussed in Swedish — translate to English in code (e.g. "kommuner" → "municipalities")

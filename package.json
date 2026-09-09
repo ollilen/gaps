@@ -17,12 +17,12 @@
   "devDependencies": {
     "@emnapi/core": "^1.11.3",
     "@emnapi/runtime": "^1.11.3",
-    "adm-zip": "^0.6.0",
+    "fflate": "^0.8.3",
     "proj4": "^2.22.0",
+    "read-excel-file": "^9.3.10",
     "shapefile": "^0.6.6",
     "typescript": "^6.0.3",
     "vite": "^8.1.0",
-    "vitest": "^4.1.9",
-    "xlsx": "^0.18.5"
+    "vitest": "^4.1.9"
   }
 }
