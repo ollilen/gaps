@@ -2,7 +2,7 @@ import { EitherAsync } from 'purify-ts/EitherAsync'
 import { Left } from 'purify-ts/Either'
 import type { PartyCode } from '../domain/election'
 
-export const votingDistrictYears = [2022] as const
+export const votingDistrictYears = [2022, 2018, 2014, 2010, 2006, 2002, 1998, 1994, 1991, 1988] as const
 export type VotingDistrictYear = (typeof votingDistrictYears)[number]
 
 type VotingDistrictProperties = {
