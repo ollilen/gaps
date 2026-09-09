@@ -11,7 +11,8 @@
     "typecheck": "tsc --noEmit"
   },
   "dependencies": {
-    "maplibre-gl": "^6.8.0"
+    "maplibre-gl": "^6.8.0",
+    "purify-ts": "^2.1.4"
   },
   "devDependencies": {
     "@emnapi/core": "^1.11.3",

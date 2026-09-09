@@ -19,9 +19,30 @@ Full-stack web application built with TypeScript (Node.js).
 - Prefer pure functions with no side effects
 - Avoid mutation; use `const`, `readonly`, and immutable data structures
 - Use `map`, `filter`, `reduce` over imperative loops
-- Model errors as values (Result/Either types) rather than throwing exceptions
+- Model errors as values (`Either`, `EitherAsync`, `Maybe`) rather than throwing exceptions
 - Compose small, single-purpose functions into larger behaviors
 - Avoid classes where functions and modules suffice
+
+**This project uses [purify-ts](https://gigobyte.github.io/purify/) as its FP standard library.** Reach for these types before rolling your own:
+
+| Situation | Type |
+|---|---|
+| Value that may be absent | `Maybe<T>` |
+| Operation that can fail | `Either<L, R>` |
+| Async operation that can fail | `EitherAsync<L, R>` |
+
+```typescript
+// absent value
+const found: Maybe<Municipality> = Maybe.fromNullable(lookup[id])
+
+// fallible parsing/validation
+const parsed: Either<ValidationError, Coordinate> = coordinate(lng, lat)
+
+// fallible fetch
+const data: EitherAsync<FetchError, FeatureCollection> = fetchMunicipalities()
+```
+
+Do not invent ad-hoc `{ ok: boolean }` result shapes — use `Either` instead.
 
 ### Domain-Driven Design (DDD)
 - Organize code around business domains, not technical layers
