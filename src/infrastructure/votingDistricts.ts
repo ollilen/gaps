@@ -20,7 +20,7 @@ export type VotingDistrictFeatureCollection = {
   readonly features: readonly VotingDistrictFeature[]
 }
 
-// Source: Valmyndigheten, 2022 Riksdag election results per valdistrikt.
+// Source: Valmyndigheten, 2022 Riksdag election results per voting district.
 // Pre-processed from XLSX + boundary JSON at build time; bundled as a static asset.
 export const fetchVotingDistricts = async (): Promise<VotingDistrictFeatureCollection> => {
   const res = await fetch('/voting-districts-2022.geojson')
