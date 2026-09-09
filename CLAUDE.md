@@ -89,6 +89,10 @@ src/
 - Breaking change: `!` after type/scope, plus a `BREAKING CHANGE:` footer
 - One logical change per commit
 
+## Pull Requests
+- Title: same Conventional Commits format as commits, `type(scope): summary`
+- Body: `## Summary` bullets + `## Test plan` bullets, no prose
+
 ## What to Avoid
 - Mutable global state
 - God objects / god functions
