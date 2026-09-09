@@ -1,0 +1,15 @@
+.map-controls-panel {
+  padding: 8px 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font: 13px system-ui, sans-serif;
+  background: white;
+}
+
+.map-controls-panel__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
