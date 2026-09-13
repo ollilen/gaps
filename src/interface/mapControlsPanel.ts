@@ -22,6 +22,7 @@ export class MapControlsPanel implements IControl {
     toggles: readonly LayerToggle[],
     subPanels: ReadonlyMap<string, HTMLElement> = new Map(),
     selectionMode: SelectionMode = 'checkbox',
+    private readonly footer?: HTMLElement,
   ) {
     this.toggles = toggles
     this.subPanels = subPanels
@@ -47,6 +48,8 @@ export class MapControlsPanel implements IControl {
         container.appendChild(this.buildToggleRow(toggle))
       }
     })
+
+    if (this.footer) container.appendChild(this.footer)
 
     this.container = Just(container)
     return container

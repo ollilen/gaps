@@ -111,7 +111,15 @@ const buildVotingDistrictsSubPanel = (): HTMLElement => {
 
 const subPanels = new Map([[votingDistrictsToggle.id, buildVotingDistrictsSubPanel()]])
 
-map.addControl(new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels, 'radio'), 'top-right')
+const disclaimer = document.createElement('p')
+disclaimer.className = 'map-controls-panel__disclaimer'
+disclaimer.textContent =
+  'Boundaries and results may be incomplete or contain errors — please verify anything important elsewhere. No responsibility is taken for mistakes. This is a personal side project, made for fun.'
+
+map.addControl(
+  new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels, 'radio', disclaimer),
+  'top-right',
+)
 
 const tooltip = new Popup({ closeButton: false, closeOnClick: false })
 

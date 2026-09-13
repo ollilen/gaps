@@ -40,3 +40,13 @@
   padding: 2px 4px;
   cursor: pointer;
 }
+
+.map-controls-panel__disclaimer {
+  margin-top: 4px;
+  padding-top: 6px;
+  border-top: 1px solid #ddd;
+  font-size: 11px;
+  line-height: 1.4;
+  color: #777;
+  max-width: 220px;
+}
