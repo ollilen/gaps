@@ -20,50 +20,22 @@ export type MunicipalityFeatureCollection = {
   readonly features: readonly MunicipalityFeature[]
 }
 
-// Field names mirror the OpenDataSoft API response (dataset: georef-sweden-kommun).
-type ApiRecord = {
-  readonly kom_code: readonly string[]
-  readonly kom_name: readonly string[]
-  readonly geo_shape: {
-    readonly geometry: Geometry
-  }
-}
-
 export type FetchError = { readonly kind: 'FetchError'; readonly message: string }
 
-// Source: OpenDataSoft — georef-sweden-kommun (boundaries from Lantmäteriet)
+// Source: Lantmäteriet — Administrativ indelning (kommun-lan-rike), licensed CC BY 4.0.
+// Pre-processed at build time via scripts/generate-municipalities.mjs and bundled as a static
+// asset — see docs/DEPENDENCIES.md for the attribution requirement (surfaced in the map's
+// attribution control in src/main.ts) and why this is a static asset rather than a live API call.
 export const fetchStockholmMunicipalities = (): EitherAsync<FetchError, MunicipalityFeatureCollection> =>
   EitherAsync(async ({ liftEither }) => {
-    const params = new URLSearchParams({
-      select: 'kom_code,kom_name,geo_shape',
-      where: "lan_code='01'",
-      limit: '30',
-    })
-
-    const res = await fetch(
-      `https://public.opendatasoft.com/api/explore/v2.1/catalog/datasets/georef-sweden-kommun/records?${params}`,
-    )
-
+    const res = await fetch('/municipalities.geojson')
     if (!res.ok) {
       return liftEither(
         Left<FetchError, MunicipalityFeatureCollection>({
           kind: 'FetchError',
-          message: `Failed to fetch municipality boundaries: ${res.status}`,
+          message: `Failed to load municipality boundaries: ${res.status}`,
         }),
       )
     }
-
-    const data: { results: readonly ApiRecord[] } = await res.json()
-
-    return {
-      type: 'FeatureCollection',
-      features: data.results.map(record => ({
-        type: 'Feature',
-        geometry: record.geo_shape.geometry,
-        properties: {
-          municipalityCode: record.kom_code[0] ?? '',
-          municipalityName: record.kom_name[0] ?? '',
-        },
-      })),
-    }
+    return res.json() as Promise<MunicipalityFeatureCollection>
   })

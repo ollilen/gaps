@@ -113,7 +113,11 @@ map.on('load', () => {
       result.caseOf({
         Left: err => console.error(`[municipalities] ${err.message}`),
         Right: geojson => {
-          map.addSource('municipalities', { type: 'geojson', data: geojson as unknown as FeatureCollection })
+          map.addSource('municipalities', {
+            type: 'geojson',
+            data: geojson as unknown as FeatureCollection,
+            attribution: 'Administrativ indelning © Lantmäteriet, CC BY 4.0',
+          })
 
           map.addLayer({
             id: 'municipalities-fill',
@@ -157,7 +161,11 @@ map.on('load', () => {
       result.caseOf({
         Left: err => console.error(`[voting-districts] ${err.message}`),
         Right: geojson => {
-          map.addSource('voting-districts', { type: 'geojson', data: geojson as unknown as FeatureCollection })
+          map.addSource('voting-districts', {
+            type: 'geojson',
+            data: geojson as unknown as FeatureCollection,
+            attribution: 'Election results: Valmyndigheten',
+          })
 
           map.addLayer({
             id: 'voting-districts-fill',
