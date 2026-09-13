@@ -49,17 +49,12 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
 
 ### Municipality boundaries — Lantmäteriet ("Kommun, län och rike")
 - **What:** Pre-processed at build time by `scripts/generate-municipalities.mjs` into
-  `public/municipalities.geojson`; bundled as a static asset, no runtime call to Lantmäteriet
-  (`src/infrastructure/municipalities.ts` just fetches the local file, same pattern as
-  `votingDistricts.ts`). Replaces both the original OpenDataSoft-sourced fetch (no declared
-  license) and an intermediate OGC API Features approach (abandoned — see below).
+  `public/municipalities.geojson`; bundled as a static asset. `src/infrastructure/municipalities.ts`
+  fetches the local file, same pattern as `votingDistricts.ts` — no runtime call to Lantmäteriet.
 - **Terms:** Governed by Lantmäteriet's *"Användningsvillkor för värdefulla datamängder"*
   (2025-02-01, DNR LM2025/009266 — full text at
-  `docs/lantmateriet-anvandningsvillkor-vardefulla-datamangder.pdf`) — **CC BY 4.0**, not CC0. No
-  fee, no legal review required. Free use, modification, and redistribution, including commercial
-  use, **provided attribution is given**. Corrects an earlier assumption in this file that
-  Lantmäteriet's open geodata is uniformly CC0 — true for some products, but the "värdefulla
-  datamängder" (high-value datasets) terms that apply here require attribution.
+  `docs/lantmateriet-anvandningsvillkor-vardefulla-datamangder.pdf`) — **CC BY 4.0**. Free use,
+  modification, and redistribution, including commercial use, **provided attribution is given**.
 - **Attribution requirement (CC BY 4.0):** state (1) the product name as data source, (2)
   "©Lantmäteriet", (3) whether the data has been processed, and (4) that CC BY 4.0 applies.
   Satisfied via the map's attribution control (`src/main.ts`):
@@ -69,15 +64,10 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
   `kommun-lan-rike`) needs no auth to browse — only the actual GeoPackage *download*
   (`dl1.lantmateriet.se/...zip`) requires HTTP Basic auth. Filtered to Stockholm county
   (`lanskod = '01'`) to match the rest of the app; converted from GeoPackage/WKB
-  (EPSG:3006/SWEREF99&nbsp;TM) to GeoJSON (WGS84) by the script, using a small hand-rolled WKB
-  decoder — deliberately not the `@ngageoint/geopackage` npm package, which pulls in
-  known-vulnerable transitive deps (`file-type`/`image-size`, for embedded raster tiles this
-  dataset doesn't have) that `npm audit` flagged; see `CLAUDE.md`'s dependency-security rule.
+  (EPSG:3006/SWEREF99&nbsp;TM) to GeoJSON (WGS84) by the script.
 - **Regenerating the data:** run `node --env-file=.env scripts/generate-municipalities.mjs` with
   `LANTMATERIET_USERNAME`/`LANTMATERIET_PASSWORD` set in `.env` (see `.env.example`). These are
-  **build-time only, never `VITE_`-prefixed**, so they're never inlined into the client bundle —
-  this was a deliberate design choice after we initially explored a live client-side API call
-  (OGC API Features) that would have required a client-visible credential on every page load.
+  build-time only, never `VITE_`-prefixed, so they're never inlined into the client bundle.
   ⚠️ Currently this is a personal Lantmäteriet account login, used as a stopgap because devportal
   access to get an Application-scoped Consumer Key/Secret is still blocked (open ticket with
   Lantmäteriet support) — swap this for a proper Application credential once that's resolved, and
