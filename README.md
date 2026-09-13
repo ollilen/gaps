@@ -26,12 +26,17 @@ The codebase follows functional programming and Domain-Driven Design principles:
 
 | Source | What is fetched |
 |--------|----------------|
-| **OpenStreetMap** `tile.openstreetmap.org` | Raster base map tiles — PNG tiles at any zoom level, rendered as the background layer by MapLibre GL |
-| **OpenDataSoft — georef-sweden-kommun** `public.opendatasoft.com` | Municipality boundary polygons for Stockholm county (26 municipalities); fields: `kom_code`, `kom_name`, `geo_shape`. Boundaries sourced from Lantmäteriet |
+| **OpenFreeMap** `tiles.openfreemap.org` | Vector base map tiles (Liberty style, sprites, glyphs) rendered as the background layer by MapLibre GL. Do not point this at `tile.openstreetmap.org` — that server is for light testing only and throttles/drops requests from a deployed app |
 
 ### Build-time (pre-processed into static GeoJSON, bundled under `public/`)
 
 These sources are queried by scripts in `scripts/` and the output is committed as static assets. Re-run the scripts to refresh the data.
+
+#### Lantmäteriet ("Kommun, län och rike") — `api.lantmateriet.se` / `dl1.lantmateriet.se`
+
+Produces `public/municipalities.geojson` — municipality boundary polygons for Stockholm county (26 municipalities), filtered from the national dataset and reprojected from SWEREF99 TM to WGS84.
+
+Script: `scripts/generate-municipalities.mjs`
 
 #### Valmyndigheten (Swedish Election Authority) — `historik.val.se`
 
