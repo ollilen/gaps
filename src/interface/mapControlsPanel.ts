@@ -4,8 +4,10 @@ import { toggleVisibility, type LayerToggle, type Visibility } from '../domain/l
 
 export type SelectionMode = 'checkbox' | 'radio'
 
-const applyVisibility = (map: MapLibreMap, toggle: LayerToggle, visibility: Visibility): void => {
-  toggle.layerIds.forEach(layerId => map.setLayoutProperty(layerId, 'visibility', visibility))
+export const applyVisibility = (map: MapLibreMap, toggle: LayerToggle, visibility: Visibility): void => {
+  toggle.layerIds.forEach(layerId => {
+    if (map.getLayer(layerId)) map.setLayoutProperty(layerId, 'visibility', visibility)
+  })
 }
 
 export class MapControlsPanel implements IControl {
