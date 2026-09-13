@@ -25,8 +25,14 @@ const PUBLIC_DIR = join(__dirname, '..', 'public')
 proj4.defs('SWEREF99TM', '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
 const toWGS84 = proj4('SWEREF99TM', 'WGS84')
 
+// 6 decimal places (~11 cm) is far finer than this map ever renders at; the raw
+// reprojected floats carry ~15 significant digits of noise that roughly doubles
+// the output file size for no visible benefit.
+const COORD_PRECISION = 6
+const round = (n) => Math.round(n * 10 ** COORD_PRECISION) / 10 ** COORD_PRECISION
+
 const reprojectCoords = (coords) => {
-  if (typeof coords[0] === 'number') return toWGS84.forward([coords[0], coords[1]])
+  if (typeof coords[0] === 'number') return toWGS84.forward([coords[0], coords[1]]).map(round)
   return coords.map(reprojectCoords)
 }
 
@@ -53,6 +59,7 @@ const YEAR_CONFIGS = {
     partyColSuffix: '',      // party columns are bare: "M", "S", "SD", …
     codeField: 'VD',
     nameField: 'VD_NAMN',
+    boundariesEncoding: 'UTF-8',
   },
   2014: {
     resultsUrl: 'https://historik.val.se/val/val2014/statistik/2014_riksdagsval_per_valdistrikt.skv',
@@ -214,7 +221,11 @@ const loadBoundaries = async (zipBuffer, config) => {
   try {
     writeFileSync(join(tmpDir, 'data.shp'), Buffer.from(files[shpKey]))
     writeFileSync(join(tmpDir, 'data.dbf'), Buffer.from(files[dbfKey]))
-    const col = await shapefile.read(join(tmpDir, 'data.shp'), join(tmpDir, 'data.dbf'), { encoding: 'UTF-8' })
+    // DBF text encoding varies by source year — Valmyndigheten's older (2010/2014) shapefiles
+    // are windows-1252 (the shapefile spec's de facto default), the 2018 one is UTF-8. Forcing
+    // UTF-8 on the older files silently mangled å/ä/ö into U+FFFD.
+    const encoding = config.boundariesEncoding ?? 'windows-1252'
+    const col = await shapefile.read(join(tmpDir, 'data.shp'), join(tmpDir, 'data.dbf'), { encoding })
     console.log(`  ${col.features.length} boundary features`)
     return col.features
   } finally {
@@ -273,7 +284,10 @@ const processYear = async (year) => {
   console.log(`  Written: voting-districts-${year}.geojson (${mb} MB)`)
 }
 
-for (const year of [2018, 2014, 2010]) {
+const requestedYears = process.argv.slice(2).map(Number)
+const years = requestedYears.length > 0 ? requestedYears : [2018, 2014, 2010]
+for (const year of years) {
+  if (!YEAR_CONFIGS[year]) throw new Error(`No config for year ${year}`)
   await processYear(year)
 }
 console.log('\nAll done.')
