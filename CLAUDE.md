@@ -103,6 +103,24 @@ src/
 - If no safe alternative exists, stop and discuss the trade-off with the user before committing
 - This applies to devDependencies too — scripts run on developer machines and CI
 
+## Dependency & Service Licensing
+- Before adding any new dependency or third-party service, verify its license/usage policy —
+  check the package's `license` field (or the service's terms-of-use/usage-policy page), not
+  just its README or popularity
+- Only use things that are genuinely open source (OSI-approved permissive or weak-copyleft
+  license — MIT, ISC, BSD, Apache-2.0, MPL, etc.) and that explicitly allow production use and
+  commercial use, even though this project isn't commercial today
+- A free tier, a "free for non-commercial use" service, an unlicensed/no-declared-license
+  package, or an API that requires a paid plan for production traffic does **not** qualify —
+  stop and check with the user (Olivia) before adding it, even if it looks like the only option
+- This applies to services called at runtime (APIs, tile servers, CDNs) exactly as much as it
+  applies to npm packages — a hotlinked third-party API is a dependency too, and can silently
+  stop working in production even when it works fine in local development (e.g. rate limiting or
+  a usage policy that only kicks in under real traffic)
+- Record every dependency and service, its license, and what that license permits in
+  `docs/DEPENDENCIES.md`; update it whenever a dependency or service is added, removed, or
+  changes license
+
 ## Language
 - All code must be in English: variable names, function names, file names, type names, layer IDs, source keys, property names
 - This applies even when domain concepts are discussed in Swedish — translate to English in code (e.g. "kommuner" → "municipalities")
