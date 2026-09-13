@@ -1,6 +1,6 @@
 import { Map as MapLibreMap, Popup, setWorkerUrl, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
-import maplibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
+import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection } from 'geojson'
 import { stockholmMunicipalityColors, type MunicipalityColorMap } from './domain/municipality'
 import { partyColors, type PartyCode } from './domain/election'
@@ -53,7 +53,7 @@ if (!container) throw new Error('Map container #map not found')
 // self-contained worker chunk (it isn't standalone — it imports a sibling maplibre-gl-shared.mjs
 // by relative path, which a plain `?url` copy would leave unresolved/404) and gives us the
 // resulting URL. Must run before any Map is constructed.
-setWorkerUrl(maplibreWorkerUrl)
+setWorkerUrl(mapLibreWorkerUrl)
 
 const map = new MapLibreMap({
   container,
