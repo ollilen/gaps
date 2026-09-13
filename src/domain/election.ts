@@ -2,9 +2,6 @@ export type PartyCode = 'S' | 'M' | 'SD' | 'C' | 'V' | 'KD' | 'L' | 'MP' | 'OTHE
 
 export type HexColor = `#${string}`
 
-// S/V (both red) and M/L (both blue) were previously near-indistinguishable on the filled
-// map (RGB distance ~30); V and L are shifted within their party's hue family to push that
-// well above the other pairs' contrast (~80-95) while staying recognizable.
 export const partyColors: Readonly<Record<PartyCode, HexColor>> = {
   S: '#E8112d',
   M: '#1B68AF',
