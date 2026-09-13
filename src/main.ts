@@ -48,24 +48,10 @@ if (!container) throw new Error('Map container #map not found')
 
 const map = new MapLibreMap({
   container,
-  style: {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: ['https://tile.openstreetmap.org/{z}/{x}/{y}.png'],
-        tileSize: 256,
-        attribution: '© <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-      },
-    },
-    layers: [
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-      },
-    ],
-  },
+  // OpenFreeMap (Liberty style): free, no API key, no rate limits, permits production/commercial
+  // use. See docs/DEPENDENCIES.md. Do not point this back at tile.openstreetmap.org — that
+  // server is for light testing only and will throttle/drop requests from a deployed app.
+  style: 'https://tiles.openfreemap.org/styles/liberty',
   center: [18.0686, 59.3293],
   zoom: 11,
 })
