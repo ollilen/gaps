@@ -1,5 +1,6 @@
-import { Map as MapLibreMap, Popup, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
+import { Map as MapLibreMap, Popup, setWorkerUrl, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
+import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection } from 'geojson'
 import { stockholmMunicipalityColors, type MunicipalityColorMap } from './domain/municipality'
 import { partyColors, type PartyCode } from './domain/election'
@@ -45,6 +46,14 @@ const legendPartyCodes: readonly PartyCode[] = ['S', 'M', 'SD', 'C', 'V', 'KD', 
 
 const container = document.getElementById('map')
 if (!container) throw new Error('Map container #map not found')
+
+// maplibre-gl resolves its worker script from import.meta.url at runtime, which Rollup can't
+// statically analyze — so the worker file never gets emitted into the production build and tile
+// parsing silently fails (blank map, no console error). `?worker&url` makes Vite bundle it as a
+// self-contained worker chunk (it isn't standalone — it imports a sibling maplibre-gl-shared.mjs
+// by relative path, which a plain `?url` copy would leave unresolved/404) and gives us the
+// resulting URL. Must run before any Map is constructed.
+setWorkerUrl(mapLibreWorkerUrl)
 
 const map = new MapLibreMap({
   container,
