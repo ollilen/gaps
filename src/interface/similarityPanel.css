@@ -58,3 +58,10 @@
   font-size: 10px;
   flex-shrink: 0;
 }
+
+.similarity-panel__raw-score {
+  color: #999;
+  font-variant-numeric: tabular-nums;
+  font-size: 9px;
+  flex-shrink: 0;
+}

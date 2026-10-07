@@ -138,6 +138,7 @@ const applySimilarityScores = (
   base: StatisticalAreaFeatureCollection,
   scores: ReadonlyMap<SamsCode, number>,
   selectedCode: SamsCode | null,
+  topMatchCode: SamsCode | null,
 ): void => {
   const updated = {
     ...base,
@@ -145,7 +146,13 @@ const applySimilarityScores = (
       const code = f.properties.samsCode
       const score = scores.get(code) ?? 0
       const displayCategory =
-        code === selectedCode ? 'selected' : selectedCode === null ? 'neutral' : 'top10'
+        code === selectedCode
+          ? 'selected'
+          : selectedCode === null
+            ? 'neutral'
+            : code === topMatchCode
+              ? 'topMatch'
+              : 'top10'
       return {
         ...f,
         properties: { ...f.properties, similarityScore: score, displayCategory },
@@ -298,7 +305,7 @@ map.on('load', () => {
                 'case',
                 ['==', ['get', 'displayCategory'], 'selected'],
                 '#f59e0b',
-                ['==', ['get', 'displayCategory'], 'top10'],
+                ['any', ['==', ['get', 'displayCategory'], 'top10'], ['==', ['get', 'displayCategory'], 'topMatch']],
                 [
                   'interpolate',
                   ['linear'],
@@ -316,6 +323,8 @@ map.on('load', () => {
                 'case',
                 ['==', ['get', 'displayCategory'], 'selected'],
                 0.9,
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                0.85,
                 ['==', ['get', 'displayCategory'], 'top10'],
                 0.7,
                 0.2,
@@ -329,8 +338,20 @@ map.on('load', () => {
             source: 'statistical-areas',
             layout: { visibility: statisticalAreasToggle.defaultVisibility },
             paint: {
-              'line-color': '#ffffff',
-              'line-width': 0.5,
+              // The most similar area gets the same amber outline as the selected area, so the
+              // single best match is identifiable at a glance against the rest of the blue gradient.
+              'line-color': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                '#f59e0b',
+                '#ffffff',
+              ] as unknown as ExpressionSpecification,
+              'line-width': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                2,
+                0.5,
+              ] as unknown as ExpressionSpecification,
             },
           })
 
@@ -356,7 +377,7 @@ map.on('load', () => {
 
             if (clickedCode === selectedSamsCode) {
               selectedSamsCode = null
-              applySimilarityScores(source, statisticalAreasCollection, new Map(), null)
+              applySimilarityScores(source, statisticalAreasCollection, new Map(), null, null)
               updateSimilarityPanel(similarityPanel, null, null)
               return
             }
@@ -373,11 +394,12 @@ map.on('load', () => {
                 const maxScore = ranked[0]?.score ?? 1
                 const range = maxScore - minScore
                 const rescale = (s: number): number => (range === 0 ? 1 : (s - minScore) / range)
-                const rescaledRanked = ranked.map(r => ({ ...r, score: rescale(r.score) }))
+                const rescaledRanked = ranked.map(r => ({ samsCode: r.samsCode, samsName: r.samsName, rawScore: r.score, score: rescale(r.score) }))
                 const scoreMap = new Map(rescaledRanked.map(r => [r.samsCode, r.score] as const))
                 scoreMap.set(clickedCode, 1.0)
-                applySimilarityScores(source, statisticalAreasCollection, scoreMap, clickedCode)
-                updateSimilarityPanel(similarityPanel, props.samsName, rescaledRanked.slice(0, 5))
+                const topMatchCode = rescaledRanked[0]?.samsCode ?? null
+                applySimilarityScores(source, statisticalAreasCollection, scoreMap, clickedCode, topMatchCode)
+                updateSimilarityPanel(similarityPanel, props.samsName, rescaledRanked.slice(0, 10))
               },
             })
           })
