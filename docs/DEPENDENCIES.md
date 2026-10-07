@@ -79,14 +79,15 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
   updates; major changes require re-acceptance (§5). Low risk here since this is an occasional
   build-time regeneration, not live production traffic.
 
-### Demographic statistics & DeSO boundaries — SCB (Statistics Sweden)
+### Demographic statistics & RegSO boundaries — SCB (Statistics Sweden)
 - **What:** Pre-processed at build time by `scripts/buildStatisticalAreas.mjs` into
   `public/statistical-areas.geojson`; bundled as a static asset. `src/infrastructure/statisticalAreas.ts`
   fetches the local file, same pattern as `municipalities.ts`/`votingDistricts.ts` — no runtime call
-  to SCB. Two SCB services are used: the GeoServer WFS (`geodata.scb.se/geoserver/stat/wfs`, layers
-  `stat:DeSO_2018` and `stat:RegSO_2020`) for boundaries/names, and the PxWeb API
+  to SCB. Two SCB services are used: the GeoServer WFS (`geodata.scb.se/geoserver/stat/wfs`, layer
+  `stat:RegSO_2020`) for official RegSO boundaries and names, and the PxWeb API
   (`api.scb.se/OV0104/v1/doris`) for demographic tables (age, income, foreign background, housing
-  tenure, household type).
+  tenure, household type, education level) — queried directly with RegSO codes, since these tables
+  support both DeSO and RegSO granularity.
 - **Terms:** SCB's open data (both the geodata WFS/WMS services and the PxWeb statistical database)
   is licensed **CC0 1.0 Universal** — public domain, no attribution required, explicitly free for
   commercial and production use. No API key or registration needed for either service.
@@ -97,7 +98,7 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
   has been processed (which it has been here: reprojected, joined, normalized), so no attribution
   is surfaced in the map's attribution control.
 - **Rate limits:** PxWeb caps requests at 10 calls per 10 seconds per IP and 100,000 values per
-  table query (HTTP 403 if exceeded). `buildStatisticalAreas.mjs` issues 5 parallel PxWeb POSTs
+  table query (HTTP 403 if exceeded). `buildStatisticalAreas.mjs` issues 6 parallel PxWeb POSTs
   per run, comfortably under the limit. This is a build-time-only concern — there is no runtime
   traffic to SCB, so production usage can never trigger it.
 - **Regenerating the data:** run `node scripts/buildStatisticalAreas.mjs`. No credentials needed.

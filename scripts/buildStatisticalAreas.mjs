@@ -1,15 +1,18 @@
 #!/usr/bin/env node
 /**
- * Fetches DeSO (Demografiska statistikområden) boundaries from SCB GeoServer
+ * Fetches RegSO (Regionala statistikområden) boundaries from SCB GeoServer
  * and demographic data from SCB PxWeb API, merges and normalizes them, then
  * writes public/statistical-areas.geojson.
  *
- * DeSO is SCB's current small-area statistical unit (replacing SAMS from 2018).
- * Stockholm stad (municipality 0180) has 544 DeSO areas.
+ * RegSO is SCB's named, human-facing small-area grouping, one level up from the unnamed
+ * DeSO building-block areas (each RegSO groups several DeSO areas). Querying at RegSO level
+ * directly — rather than aggregating DeSO areas ourselves — gives every area an official,
+ * unique name and lets SCB's own tables do the aggregation. Stockholm stad (municipality
+ * 0180) has 127 RegSO areas.
  *
  * Data sources:
- *   Boundaries: SCB GeoServer WFS — stat:DeSO_2018 (SWEREF99TM, reprojected to WGS84)
- *   Demographics: SCB PxWeb API v1 (json-stat2), DeSO-level tables
+ *   Boundaries: SCB GeoServer WFS — stat:RegSO_2020 (SWEREF99TM, reprojected to WGS84)
+ *   Demographics: SCB PxWeb API v1 (json-stat2), DeSO/RegSO-level tables queried with RegSO codes
  *
  * Run: node scripts/buildStatisticalAreas.mjs
  */
@@ -39,25 +42,9 @@ const reprojectCoords = (coords) => {
 
 // ── WFS boundary fetch ───────────────────────────────────────────────────────
 
+// RegSO features already carry their own official name (regsonamn), so no separate name join
+// is needed — unlike DeSO, which has no name of its own.
 const fetchBoundaries = async () => {
-  const url =
-    'https://geodata.scb.se/geoserver/stat/wfs' +
-    '?service=WFS&version=2.0.0&request=GetFeature' +
-    '&typeNames=stat:DeSO_2018' +
-    '&outputFormat=application/json' +
-    `&CQL_FILTER=kommunkod='${STOCKHOLM_KOM}'`
-
-  process.stdout.write(`  WFS DeSO_2018 (Stockholm stad) ... `)
-  const res = await fetch(url)
-  if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
-  const geojson = await res.json()
-  console.log(`${geojson.features.length} features`)
-  return geojson
-}
-
-// Returns Map<regsokod, regsonamn> for all RegSO areas in Stockholm stad.
-// DeSO areas each belong to a RegSO; the RegSO name is used as the display name.
-const fetchRegsoNames = async () => {
   const url =
     'https://geodata.scb.se/geoserver/stat/wfs' +
     '?service=WFS&version=2.0.0&request=GetFeature' +
@@ -65,13 +52,12 @@ const fetchRegsoNames = async () => {
     '&outputFormat=application/json' +
     `&CQL_FILTER=kommunkod='${STOCKHOLM_KOM}'`
 
-  process.stdout.write(`  WFS RegSO_2020 (for names) ... `)
+  process.stdout.write(`  WFS RegSO_2020 (Stockholm stad) ... `)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   const geojson = await res.json()
-  const names = new Map(geojson.features.map(f => [f.properties.regsokod, f.properties.regsonamn]))
-  console.log(`${names.size} RegSO names`)
-  return names
+  console.log(`${geojson.features.length} features`)
+  return geojson
 }
 
 // ── PxWeb helpers ────────────────────────────────────────────────────────────
@@ -144,9 +130,9 @@ const AGE_BRACKET_FIELDS = {
 const AGE_BRACKETS = Object.keys(AGE_BRACKET_FIELDS)
 const AGE_SHARE_FIELDS = Object.values(AGE_BRACKET_FIELDS)
 
-const fetchAgeDistribution = async (desoCodes) => {
+const fetchAgeDistribution = async (regsoCodes) => {
   const dataset = await scbPost('BE/BE0101/BE0101Y/FolkmDesoAldKon', [
-    { code: 'Region', selection: { filter: 'item', values: desoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
     { code: 'Alder', selection: { filter: 'item', values: ['totalt', ...AGE_BRACKETS] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y7'] } },
@@ -154,7 +140,7 @@ const fetchAgeDistribution = async (desoCodes) => {
   ])
 
   const result = new Map()
-  for (const code of desoCodes) {
+  for (const code of regsoCodes) {
     const total = readValue(dataset, { Region: code, Alder: 'totalt', Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
     const denom = total > 0 ? total : 1
     const shares = {}
@@ -167,11 +153,11 @@ const fetchAgeDistribution = async (desoCodes) => {
   return result
 }
 
-const fetchMeanNetIncome = async (desoCodes) => {
+const fetchMeanNetIncome = async (regsoCodes) => {
   // Tab2InkDesoRegso: income structure by DeSO/RegSO
   // Inkomstkomponenter 240 = nettoinkomst, ContentsCode 000008A4 = mean for all (tkr)
   const dataset = await scbPost('HE/HE0110/HE0110I/Tab2InkDesoRegso', [
-    { code: 'Region', selection: { filter: 'item', values: desoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
     { code: 'Inkomstkomponenter', selection: { filter: 'item', values: ['240'] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000008A4'] } },
@@ -179,7 +165,7 @@ const fetchMeanNetIncome = async (desoCodes) => {
   ])
 
   const result = new Map()
-  for (const code of desoCodes) {
+  for (const code of regsoCodes) {
     const val = readValue(dataset, { Region: code, Inkomstkomponenter: '240', Kon: '1+2', ContentsCode: '000008A4', Tid: YEAR })
     // Value is in thousands SEK; store as actual SEK for normalization clarity
     result.set(code, (val ?? 0) * 1000)
@@ -187,11 +173,11 @@ const fetchMeanNetIncome = async (desoCodes) => {
   return result
 }
 
-const fetchForeignBackground = async (desoCodes) => {
+const fetchForeignBackground = async (regsoCodes) => {
   // FolkmDesoBakgrKon: UtlBakgrund values: '2'=Swedish bg, '1'=foreign bg, 'SA'=total
   // Request only foreign ('1') and total ('SA') to compute the share efficiently.
   const dataset = await scbPost('BE/BE0101/BE0101Y/FolkmDesoBakgrKon', [
-    { code: 'Region', selection: { filter: 'item', values: desoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
     { code: 'UtlBakgrund', selection: { filter: 'item', values: ['1', 'SA'] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y4'] } },
@@ -199,7 +185,7 @@ const fetchForeignBackground = async (desoCodes) => {
   ])
 
   const result = new Map()
-  for (const code of desoCodes) {
+  for (const code of regsoCodes) {
     const foreign = readValue(dataset, { Region: code, UtlBakgrund: '1', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
     const total = readValue(dataset, { Region: code, UtlBakgrund: 'SA', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
     result.set(code, total > 0 ? foreign / total : 0)
@@ -220,16 +206,16 @@ const HOUSEHOLD_CATEGORY_FIELDS = {
 const HOUSEHOLD_CATEGORIES = Object.keys(HOUSEHOLD_CATEGORY_FIELDS)
 const HOUSEHOLD_SHARE_FIELDS = Object.values(HOUSEHOLD_CATEGORY_FIELDS)
 
-const fetchHouseholdTypes = async (desoCodes) => {
+const fetchHouseholdTypes = async (regsoCodes) => {
   const dataset = await scbPost('BE/BE0101/BE0101Y/HushallDesoTyp', [
-    { code: 'Region', selection: { filter: 'item', values: desoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
     { code: 'Hushallstyp', selection: { filter: 'item', values: [...HOUSEHOLD_CATEGORIES, 'TOTALT'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y1'] } },
     { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
   ])
 
   const result = new Map()
-  for (const code of desoCodes) {
+  for (const code of regsoCodes) {
     const total = readValue(dataset, { Region: code, Hushallstyp: 'TOTALT', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
     const denom = total > 0 ? total : 1
     const shares = {}
@@ -242,18 +228,55 @@ const fetchHouseholdTypes = async (desoCodes) => {
   return result
 }
 
-const fetchHousingTenure = async (desoCodes) => {
-  // BO0104T10N: housing by tenure at DeSO 2018 level
+// UtbSUNBefDesoRegso covers only population aged 25-64 (not the whole population, unlike the
+// other demographic tables) and has no separate TOTALT code — these 5 levels exhaustively
+// partition that population, so their sum is the denominator.
+const EDUCATION_CATEGORY_FIELDS = {
+  '21': 'educationPreSecondaryShare',
+  '3+4': 'educationSecondaryShare',
+  '5': 'educationPostSecondaryShortShare',
+  '6': 'educationPostSecondaryLongShare',
+  US: 'educationUnknownShare',
+}
+const EDUCATION_CATEGORIES = Object.keys(EDUCATION_CATEGORY_FIELDS)
+const EDUCATION_SHARE_FIELDS = Object.values(EDUCATION_CATEGORY_FIELDS)
+
+const fetchEducationLevels = async (regsoCodes) => {
+  const dataset = await scbPost('UF/UF0506/UF0506D/UtbSUNBefDesoRegso', [
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+    { code: 'UtbildningsNiva', selection: { filter: 'item', values: EDUCATION_CATEGORIES } },
+    { code: 'ContentsCode', selection: { filter: 'item', values: ['000005MO'] } },
+    { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
+  ])
+
+  const result = new Map()
+  for (const code of regsoCodes) {
+    const counts = EDUCATION_CATEGORIES.map(
+      category => readValue(dataset, { Region: code, UtbildningsNiva: category, ContentsCode: '000005MO', Tid: YEAR }) ?? 0,
+    )
+    const total = counts.reduce((sum, count) => sum + count, 0)
+    const denom = total > 0 ? total : 1
+    const shares = {}
+    EDUCATION_CATEGORIES.forEach((category, i) => {
+      shares[EDUCATION_CATEGORY_FIELDS[category]] = counts[i] / denom
+    })
+    result.set(code, shares)
+  }
+  return result
+}
+
+const fetchHousingTenure = async (regsoCodes) => {
+  // BO0104T10N: housing by tenure, queried at RegSO level
   // Upplatelseform: 1=hyresrätt(rental), 2=bostadsrätt(co-op owned), 3=äganderätt(house/owned)
   const dataset = await scbPost('BO/BO0104/BO0104D/BO0104T10N', [
-    { code: 'Region', selection: { filter: 'item', values: desoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
     { code: 'Upplatelseform', selection: { filter: 'item', values: ['1', '2', '3'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000006OC'] } },
     { code: 'Tid', selection: { filter: 'item', values: [HOUSING_YEAR] } },
   ])
 
   const result = new Map()
-  for (const code of desoCodes) {
+  for (const code of regsoCodes) {
     const rental = readValue(dataset, { Region: code, Upplatelseform: '1', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
     const owned = readValue(dataset, { Region: code, Upplatelseform: '2', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
     const house = readValue(dataset, { Region: code, Upplatelseform: '3', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
@@ -280,36 +303,38 @@ const minMaxNormalize = (values) => {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-console.log('\n=== Building statistical-areas.geojson (DeSO 2018) ===\n')
+console.log('\n=== Building statistical-areas.geojson (RegSO 2020) ===\n')
 
-console.log('1. Fetching DeSO boundaries and RegSO names...')
-const [boundaries, regsoNames] = await Promise.all([fetchBoundaries(), fetchRegsoNames()])
+console.log('1. Fetching RegSO boundaries...')
+const boundaries = await fetchBoundaries()
 
-const desoCodes = boundaries.features
-  .map(f => String(f.properties.desokod ?? '').trim())
+const regsoCodes = boundaries.features
+  .map(f => String(f.properties.regsokod ?? '').trim())
   .filter(c => c.length > 0)
 
-console.log(`   Found ${desoCodes.length} DeSO codes`)
+console.log(`   Found ${regsoCodes.length} RegSO codes`)
 
 console.log('\n2. Fetching demographic data (in parallel)...')
 
-const [ageData, incomeData, foreignData, housingData, householdData] = await Promise.all([
-  fetchAgeDistribution(desoCodes).catch(err => { console.warn(`  WARN age: ${err.message}`); return new Map() }),
-  fetchMeanNetIncome(desoCodes).catch(err => { console.warn(`  WARN income: ${err.message}`); return new Map() }),
-  fetchForeignBackground(desoCodes).catch(err => { console.warn(`  WARN foreign: ${err.message}`); return new Map() }),
-  fetchHousingTenure(desoCodes).catch(err => { console.warn(`  WARN housing: ${err.message}`); return new Map() }),
-  fetchHouseholdTypes(desoCodes).catch(err => { console.warn(`  WARN household: ${err.message}`); return new Map() }),
+const [ageData, incomeData, foreignData, housingData, householdData, educationData] = await Promise.all([
+  fetchAgeDistribution(regsoCodes).catch(err => { console.warn(`  WARN age: ${err.message}`); return new Map() }),
+  fetchMeanNetIncome(regsoCodes).catch(err => { console.warn(`  WARN income: ${err.message}`); return new Map() }),
+  fetchForeignBackground(regsoCodes).catch(err => { console.warn(`  WARN foreign: ${err.message}`); return new Map() }),
+  fetchHousingTenure(regsoCodes).catch(err => { console.warn(`  WARN housing: ${err.message}`); return new Map() }),
+  fetchHouseholdTypes(regsoCodes).catch(err => { console.warn(`  WARN household: ${err.message}`); return new Map() }),
+  fetchEducationLevels(regsoCodes).catch(err => { console.warn(`  WARN education: ${err.message}`); return new Map() }),
 ])
 
 console.log('\n3. Joining and normalizing...')
 
 const AGE_SHARE_DEFAULTS = Object.fromEntries(AGE_SHARE_FIELDS.map(field => [field, 0]))
 const HOUSEHOLD_SHARE_DEFAULTS = Object.fromEntries(HOUSEHOLD_SHARE_FIELDS.map(field => [field, 0]))
+const EDUCATION_SHARE_DEFAULTS = Object.fromEntries(EDUCATION_SHARE_FIELDS.map(field => [field, 0]))
 const HOUSING_DEFAULTS = { housingRentalShare: 0, housingOwnedShare: 0, housingHouseShare: 0 }
 
 // Fields that make up the similarity vector, in fv0..fvN order. housingHouseShare is
 // deliberately excluded — the three tenure shares sum to 1, so including it would be redundant.
-const VECTOR_FIELDS = [...AGE_SHARE_FIELDS, 'meanIncome', 'foreignBackgroundShare', 'housingRentalShare', 'housingOwnedShare', ...HOUSEHOLD_SHARE_FIELDS]
+const VECTOR_FIELDS = [...AGE_SHARE_FIELDS, 'meanIncome', 'foreignBackgroundShare', 'housingRentalShare', 'housingOwnedShare', ...HOUSEHOLD_SHARE_FIELDS, ...EDUCATION_SHARE_FIELDS]
 
 const namedPropertiesFor = (code) => ({
   ...AGE_SHARE_DEFAULTS,
@@ -320,13 +345,15 @@ const namedPropertiesFor = (code) => ({
   ...(housingData.get(code) ?? {}),
   ...HOUSEHOLD_SHARE_DEFAULTS,
   ...(householdData.get(code) ?? {}),
+  ...EDUCATION_SHARE_DEFAULTS,
+  ...(educationData.get(code) ?? {}),
 })
 
-const desoNamedProperties = boundaries.features.map(f => namedPropertiesFor(String(f.properties.desokod ?? '').trim()))
+const regsoNamedProperties = boundaries.features.map(f => namedPropertiesFor(String(f.properties.regsokod ?? '').trim()))
 
-const rawVectors = desoNamedProperties.map(named => VECTOR_FIELDS.map(field => named[field]))
+const rawVectors = regsoNamedProperties.map(named => VECTOR_FIELDS.map(field => named[field]))
 
-// Normalize each dimension independently across all DeSO areas
+// Normalize each dimension independently across all RegSO areas
 const normalizedByDim = Array.from({ length: VECTOR_FIELDS.length }, (_, dim) =>
   minMaxNormalize(rawVectors.map(v => v[dim])),
 )
@@ -334,7 +361,7 @@ const normalizedByDim = Array.from({ length: VECTOR_FIELDS.length }, (_, dim) =>
 let matched = 0, unmatched = 0
 
 const features = boundaries.features.map((f, idx) => {
-  const code = String(f.properties.desokod ?? '').trim()
+  const code = String(f.properties.regsokod ?? '').trim()
   const hasData = ageData.has(code) || incomeData.has(code)
   if (hasData) matched++
   else {
@@ -342,7 +369,7 @@ const features = boundaries.features.map((f, idx) => {
     if (unmatched <= 5) console.log(`  WARN no demographic data for "${code}"`)
   }
 
-  const named = desoNamedProperties[idx]
+  const named = regsoNamedProperties[idx]
   const fvEntries = Object.fromEntries(VECTOR_FIELDS.map((_, dim) => [`fv${dim}`, normalizedByDim[dim][idx]]))
 
   return {
@@ -353,7 +380,7 @@ const features = boundaries.features.map((f, idx) => {
     },
     properties: {
       samsCode: code,
-      samsName: regsoNames.get(String(f.properties.regsokod ?? '').trim()) ?? code,
+      samsName: f.properties.regsonamn ?? code,
       ...named,
       ...fvEntries,
     },

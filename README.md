@@ -18,7 +18,7 @@ The codebase follows functional programming and Domain-Driven Design principles:
 |--------|---------|
 | Done | **Stockholm municipalities** — all municipalities in Stockholm county rendered as a fill layer with hover tooltips |
 | Done | **Voting districts colored by party** — overlay voting districts (valdistrikt) colored by dominant party for riksdag elections 2010–2022; party legend, year selector, and hover tooltips |
-| Done | **Demographic similarity** — click a DeSO statistical area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 5 matches with relative similarity scores |
+| Done | **Demographic similarity** — click a RegSO area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 10 matches with relative similarity scores |
 
 ## Data sources
 
@@ -53,24 +53,24 @@ Script: `scripts/generate-voting-districts.mjs`
 
 | Layer | What is fetched |
 |-------|----------------|
-| `stat:DeSO_2018` | 544 DeSO statistical area boundaries for Stockholm stad (`kommunkod='0180'`) in SWEREF99TM — reprojected to WGS84 |
-| `stat:RegSO_2020` | 127 RegSO area boundaries for Stockholm stad — used only to join human-readable area names (`regsonamn`) to their DeSO sub-areas via `regsokod` |
+| `stat:RegSO_2020` | 127 RegSO (Regionala statistikområden) boundaries for Stockholm stad (`kommunkod='0180'`) in SWEREF99TM — reprojected to WGS84 |
 
-DeSO (Demografiska statistikområden) is SCB's current small-area statistical unit, introduced in 2018 to replace SAMS. DeSO 2018 codes were retired when DeSO 2025 launched; all demographic queries therefore use year 2023.
+RegSO is SCB's named, human-facing small-area grouping — one level up from DeSO (Demografiska statistikområden), the unnamed small-area statistical building block introduced in 2018 to replace SAMS. Each RegSO groups several DeSO areas and carries its own official name (`regsonamn`), unlike DeSO which has no name of its own. All demographic tables below are queried directly with RegSO codes (they're designed to support either granularity — hence names like `Tab2InkDesoRegso`), so SCB does the aggregation rather than this script summing DeSO areas itself. DeSO 2018 codes were retired when DeSO 2025 launched; all demographic queries therefore use year 2023.
 
 #### SCB PxWeb API v1 — `api.scb.se/OV0104/v1/doris/sv/ssd`
 
-All queries use DeSO 2018 codes, year 2023, filtered to the 544 Stockholm stad areas. Returns json-stat2 format.
+All queries use RegSO codes, year 2023, filtered to the 127 Stockholm stad areas. Returns json-stat2 format.
 
 | Table | What is fetched | Used for |
 |-------|----------------|----------|
-| `BE/BE0101/BE0101Y/FolkmDesoAldKon` | Population by DeSO area, 5-year age bracket, and sex | 17 age-bracket shares, at source granularity (0–4 ... 80+) |
-| `HE/HE0110/HE0110I/Tab2InkDesoRegso` | Income components by DeSO area — component 240 (nettoinkomst), mean for all | Mean net income per person. SCB does not publish a median at DeSO level — only mean, share-with-income-type, and person count are available at this granularity |
-| `BE/BE0101/BE0101Y/FolkmDesoBakgrKon` | Population by DeSO area and foreign background | Share of residents with foreign background |
-| `BO/BO0104/BO0104D/BO0104T10N` | Housing units by DeSO area and tenure type | Shares of rental, co-op owned (bostadsrätt), and owned house |
-| `BE/BE0101/BE0101Y/HushallDesoTyp` | Households by DeSO area and type | Shares of all 5 household categories: couple with/without children, single parent, single person, other |
+| `BE/BE0101/BE0101Y/FolkmDesoAldKon` | Population by RegSO area, 5-year age bracket, and sex | 17 age-bracket shares, at source granularity (0–4 ... 80+) |
+| `HE/HE0110/HE0110I/Tab2InkDesoRegso` | Income components by RegSO area — component 240 (nettoinkomst), mean for all | Mean net income per person. SCB does not publish a median at this granularity — only mean, share-with-income-type, and person count are available |
+| `BE/BE0101/BE0101Y/FolkmDesoBakgrKon` | Population by RegSO area and foreign background | Share of residents with foreign background |
+| `BO/BO0104/BO0104D/BO0104T10N` | Housing units by RegSO area and tenure type | Shares of rental, co-op owned (bostadsrätt), and owned house |
+| `BE/BE0101/BE0101Y/HushallDesoTyp` | Households by RegSO area and type | Shares of all 5 household categories: couple with/without children, single parent, single person, other |
+| `UF/UF0506/UF0506D/UtbSUNBefDesoRegso` | Population aged 25–64 by RegSO area and education level | Shares of all 5 education categories: pre-secondary, secondary, post-secondary (<3yr), post-secondary (3yr+), unknown. Unlike the other tables, this one only covers ages 25–64, not the whole population |
 
-Each table contributes one or more dimensions to a 26-component feature vector per area:
+Each table contributes one or more dimensions to a 31-component feature vector per area:
 
 | Component | Dimension | Source table |
 |-----------|-----------|-------------|
@@ -84,8 +84,15 @@ Each table contributes one or more dimensions to a 26-component feature vector p
 | `fv23` | Share of households that are single parents (ensamstående med barn) | `HushallDesoTyp` |
 | `fv24` | Share of households that are single people (ensamstående utan barn) | `HushallDesoTyp` |
 | `fv25` | Share of households in the "other" category (övriga hushåll) | `HushallDesoTyp` |
+| `fv26` | Share of population (25–64) with pre-secondary education (förgymnasial) | `UtbSUNBefDesoRegso` |
+| `fv27` | Share of population (25–64) with secondary education (gymnasial) | `UtbSUNBefDesoRegso` |
+| `fv28` | Share of population (25–64) with post-secondary education, <3 years | `UtbSUNBefDesoRegso` |
+| `fv29` | Share of population (25–64) with post-secondary education, 3+ years | `UtbSUNBefDesoRegso` |
+| `fv30` | Share of population (25–64) with unrecorded education level | `UtbSUNBefDesoRegso` |
 
-`BO0104T10N` also fetches the owned-house (äganderätt) share, but it is not included in the vector because the three tenure shares always sum to 1 — adding it would be redundant. The 17 age brackets and 5 household categories are each used in full (they also sum to 1 within their group), so some linear redundancy is intentionally present there. Each dimension is min-max normalized independently across all 544 areas before similarity is computed. Similarity between two areas is the Euclidean similarity in this 26-dimensional normalized space: `1 − distance / √26`.
+`BO0104T10N` also fetches the owned-house (äganderätt) share, but it is not included in the vector because the three tenure shares always sum to 1 — adding it would be redundant. The 17 age brackets, 5 household categories, and 5 education categories are each used in full (they also sum to 1 within their group), so some linear redundancy is intentionally present there. Each dimension is min-max normalized independently across all 127 areas before similarity is computed.
+
+Similarity between two areas is the Euclidean similarity in this 31-dimensional normalized space, but dimensions are weighted **by category rather than individually**: age (17 dims), income (1), foreign background (1), housing (2), household type (5), and education (5) each get equal total weight (1/6), with each dimension inside a category getting an equal share of its category's weight. Without this, age, household type, and education — simply by having many more sub-dimensions — would dominate the score over categories like income that are represented by a single dimension. Concretely: `similarity = 1 − √(Σ wᵢ·(aᵢ−bᵢ)²)`, where `wᵢ = 1 / (6 × dimensions in category i)`, so the weights sum to 1.
 
 Script: `scripts/buildStatisticalAreas.mjs`
 
