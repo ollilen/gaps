@@ -13,6 +13,7 @@ upgraded across a license boundary (see the "Dependency Licensing" rule in `CLAU
 | `@emnapi/core` | 1.11.3 | MIT | Permissive. Free for production and commercial use. |
 | `@emnapi/runtime` | 1.11.3 | MIT | Permissive. Free for production and commercial use. |
 | `fflate` | 0.8.3 | MIT | Permissive. Free for production and commercial use. |
+| `jsdom` | 29.1.1 | MIT | Permissive. Dev-only — DOM environment for unit-testing `src/interface/` rendering logic. |
 | `proj4` | 2.22.0 | MIT | Permissive. Free for production and commercial use. |
 | `read-excel-file` | 9.3.10 | MIT | Permissive. Free for production and commercial use. |
 | `shapefile` | 0.6.6 | BSD-3-Clause | Permissive. Free for production and commercial use. |
