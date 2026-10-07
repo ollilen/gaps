@@ -64,29 +64,28 @@ All queries use DeSO 2018 codes, year 2023, filtered to the 544 Stockholm stad a
 
 | Table | What is fetched | Used for |
 |-------|----------------|----------|
-| `BE/BE0101/BE0101Y/FolkmDesoAldKon` | Population by DeSO area, age bracket, and sex | Age group shares: 0–17, 18–29, 30–44, 45–64, 65+ |
-| `HE/HE0110/HE0110I/Tab2InkDesoRegso` | Income components by DeSO area — component 240 (nettoinkomst), mean for all | Mean net income per person |
+| `BE/BE0101/BE0101Y/FolkmDesoAldKon` | Population by DeSO area, 5-year age bracket, and sex | 17 age-bracket shares, at source granularity (0–4 ... 80+) |
+| `HE/HE0110/HE0110I/Tab2InkDesoRegso` | Income components by DeSO area — component 240 (nettoinkomst), mean for all | Mean net income per person. SCB does not publish a median at DeSO level — only mean, share-with-income-type, and person count are available at this granularity |
 | `BE/BE0101/BE0101Y/FolkmDesoBakgrKon` | Population by DeSO area and foreign background | Share of residents with foreign background |
 | `BO/BO0104/BO0104D/BO0104T10N` | Housing units by DeSO area and tenure type | Shares of rental, co-op owned (bostadsrätt), and owned house |
-| `BE/BE0101/BE0101Y/HushallDesoTyp` | Households by DeSO area and type | Shares of single-person households and households with children |
+| `BE/BE0101/BE0101Y/HushallDesoTyp` | Households by DeSO area and type | Shares of all 5 household categories: couple with/without children, single parent, single person, other |
 
-Each table contributes one or more dimensions to an 11-component feature vector per area:
+Each table contributes one or more dimensions to a 26-component feature vector per area:
 
 | Component | Dimension | Source table |
 |-----------|-----------|-------------|
-| `fv0` | Share of population aged 0–17 | `FolkmDesoAldKon` |
-| `fv1` | Share of population aged 18–29 | `FolkmDesoAldKon` |
-| `fv2` | Share of population aged 30–44 | `FolkmDesoAldKon` |
-| `fv3` | Share of population aged 45–64 | `FolkmDesoAldKon` |
-| `fv4` | Share of population aged 65+ | `FolkmDesoAldKon` |
-| `fv5` | Mean net income per person | `Tab2InkDesoRegso` |
-| `fv6` | Share of residents with foreign background | `FolkmDesoBakgrKon` |
-| `fv7` | Share of housing that is rental (hyresrätt) | `BO0104T10N` |
-| `fv8` | Share of housing that is co-op owned (bostadsrätt) | `BO0104T10N` |
-| `fv9` | Share of households that are single-person | `HushallDesoTyp` |
-| `fv10` | Share of households with children (couple or single parent) | `HushallDesoTyp` |
+| `fv0`–`fv16` | Share of population in each 5-year age bracket (0–4, 5–9, ... 75–79, 80+) | `FolkmDesoAldKon` |
+| `fv17` | Mean net income per person | `Tab2InkDesoRegso` |
+| `fv18` | Share of residents with foreign background | `FolkmDesoBakgrKon` |
+| `fv19` | Share of housing that is rental (hyresrätt) | `BO0104T10N` |
+| `fv20` | Share of housing that is co-op owned (bostadsrätt) | `BO0104T10N` |
+| `fv21` | Share of households that are couples with children (sammanboende med barn) | `HushallDesoTyp` |
+| `fv22` | Share of households that are couples without children (sammanboende utan barn) | `HushallDesoTyp` |
+| `fv23` | Share of households that are single parents (ensamstående med barn) | `HushallDesoTyp` |
+| `fv24` | Share of households that are single people (ensamstående utan barn) | `HushallDesoTyp` |
+| `fv25` | Share of households in the "other" category (övriga hushåll) | `HushallDesoTyp` |
 
-`BO0104T10N` also fetches the owned-house (äganderätt) share, but it is not included in the vector because the three tenure shares always sum to 1 — adding it would be redundant. Each dimension is min-max normalized independently across all 544 areas before similarity is computed. Similarity between two areas is the Euclidean similarity in this 11-dimensional normalized space: `1 − distance / √11`.
+`BO0104T10N` also fetches the owned-house (äganderätt) share, but it is not included in the vector because the three tenure shares always sum to 1 — adding it would be redundant. The 17 age brackets and 5 household categories are each used in full (they also sum to 1 within their group), so some linear redundancy is intentionally present there. Each dimension is min-max normalized independently across all 544 areas before similarity is computed. Similarity between two areas is the Euclidean similarity in this 26-dimensional normalized space: `1 − distance / √26`.
 
 Script: `scripts/buildStatisticalAreas.mjs`
 

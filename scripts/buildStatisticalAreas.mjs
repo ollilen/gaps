@@ -119,8 +119,30 @@ const readValue = (dataset, dimCodes) => {
 
 // ── Demographic fetches ──────────────────────────────────────────────────────
 
-// SCB FolkmDesoAldKon age brackets (last bracket is 80+ written as '80-')
-const AGE_BRACKETS = ['-4', '5-9', '10-14', '15-19', '20-24', '25-29', '30-34', '35-39', '40-44', '45-49', '50-54', '55-59', '60-64', '65-69', '70-74', '75-79', '80-']
+// SCB FolkmDesoAldKon age brackets (last bracket is 80+ written as '80-'), mapped to the
+// property name each bracket's share is stored under. Kept at source granularity rather than
+// collapsed into broader buckets, per Olivia's request to match what SCB actually publishes.
+const AGE_BRACKET_FIELDS = {
+  '-4': 'ageShare00_04',
+  '5-9': 'ageShare05_09',
+  '10-14': 'ageShare10_14',
+  '15-19': 'ageShare15_19',
+  '20-24': 'ageShare20_24',
+  '25-29': 'ageShare25_29',
+  '30-34': 'ageShare30_34',
+  '35-39': 'ageShare35_39',
+  '40-44': 'ageShare40_44',
+  '45-49': 'ageShare45_49',
+  '50-54': 'ageShare50_54',
+  '55-59': 'ageShare55_59',
+  '60-64': 'ageShare60_64',
+  '65-69': 'ageShare65_69',
+  '70-74': 'ageShare70_74',
+  '75-79': 'ageShare75_79',
+  '80-': 'ageShare80Plus',
+}
+const AGE_BRACKETS = Object.keys(AGE_BRACKET_FIELDS)
+const AGE_SHARE_FIELDS = Object.values(AGE_BRACKET_FIELDS)
 
 const fetchAgeDistribution = async (desoCodes) => {
   const dataset = await scbPost('BE/BE0101/BE0101Y/FolkmDesoAldKon', [
@@ -134,21 +156,13 @@ const fetchAgeDistribution = async (desoCodes) => {
   const result = new Map()
   for (const code of desoCodes) {
     const total = readValue(dataset, { Region: code, Alder: 'totalt', Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
-    const byBracket = {}
-    for (const bracket of AGE_BRACKETS) {
-      byBracket[bracket] = readValue(dataset, { Region: code, Alder: bracket, Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
-    }
-
-    const sum = (brackets) => brackets.reduce((s, b) => s + (byBracket[b] ?? 0), 0)
     const denom = total > 0 ? total : 1
-    result.set(code, {
-      ageShare0_17: sum(['-4', '5-9', '10-14', '15-19']) / denom,
-      ageShare18_29: sum(['20-24', '25-29']) / denom,
-      ageShare30_44: sum(['30-34', '35-39', '40-44']) / denom,
-      ageShare45_64: sum(['45-49', '50-54', '55-59', '60-64']) / denom,
-      ageShare65plus: sum(['65-69', '70-74', '75-79', '80-']) / denom,
-      total,
-    })
+    const shares = {}
+    for (const bracket of AGE_BRACKETS) {
+      const count = readValue(dataset, { Region: code, Alder: bracket, Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
+      shares[AGE_BRACKET_FIELDS[bracket]] = count / denom
+    }
+    result.set(code, shares)
   }
   return result
 }
@@ -193,12 +207,23 @@ const fetchForeignBackground = async (desoCodes) => {
   return result
 }
 
+// HushallDesoTyp's full category set (excluding TOTALT, the denominator):
+// SBMB=couple with children, SBUB=couple without children, ESMB=single parent with children,
+// ESUB=single without children, OVRIGA=other households (e.g. shared housing, multi-family).
+const HOUSEHOLD_CATEGORY_FIELDS = {
+  SBMB: 'coupleWithChildrenShare',
+  SBUB: 'coupleWithoutChildrenShare',
+  ESMB: 'singleParentShare',
+  ESUB: 'singlePersonShare',
+  OVRIGA: 'otherHouseholdShare',
+}
+const HOUSEHOLD_CATEGORIES = Object.keys(HOUSEHOLD_CATEGORY_FIELDS)
+const HOUSEHOLD_SHARE_FIELDS = Object.values(HOUSEHOLD_CATEGORY_FIELDS)
+
 const fetchHouseholdTypes = async (desoCodes) => {
-  // HushallDesoTyp: household composition by DeSO
-  // Hushallstyp: ESUB=single without children, SBMB=couple with children, ESMB=single parent with children, TOTALT=total
   const dataset = await scbPost('BE/BE0101/BE0101Y/HushallDesoTyp', [
     { code: 'Region', selection: { filter: 'item', values: desoCodes } },
-    { code: 'Hushallstyp', selection: { filter: 'item', values: ['ESUB', 'SBMB', 'ESMB', 'TOTALT'] } },
+    { code: 'Hushallstyp', selection: { filter: 'item', values: [...HOUSEHOLD_CATEGORIES, 'TOTALT'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y1'] } },
     { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
   ])
@@ -206,14 +231,13 @@ const fetchHouseholdTypes = async (desoCodes) => {
   const result = new Map()
   for (const code of desoCodes) {
     const total = readValue(dataset, { Region: code, Hushallstyp: 'TOTALT', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
-    const single = readValue(dataset, { Region: code, Hushallstyp: 'ESUB', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
-    const coupleWithChildren = readValue(dataset, { Region: code, Hushallstyp: 'SBMB', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
-    const singleParent = readValue(dataset, { Region: code, Hushallstyp: 'ESMB', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
     const denom = total > 0 ? total : 1
-    result.set(code, {
-      singlePersonShare: single / denom,
-      familyWithChildrenShare: (coupleWithChildren + singleParent) / denom,
-    })
+    const shares = {}
+    for (const category of HOUSEHOLD_CATEGORIES) {
+      const count = readValue(dataset, { Region: code, Hushallstyp: category, ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
+      shares[HOUSEHOLD_CATEGORY_FIELDS[category]] = count / denom
+    }
+    result.set(code, shares)
   }
   return result
 }
@@ -279,30 +303,31 @@ const [ageData, incomeData, foreignData, housingData, householdData] = await Pro
 
 console.log('\n3. Joining and normalizing...')
 
-const rawVectors = boundaries.features.map(f => {
-  const code = String(f.properties.desokod ?? '').trim()
-  const age = ageData.get(code) ?? { ageShare0_17: 0, ageShare18_29: 0, ageShare30_44: 0, ageShare45_64: 0, ageShare65plus: 0 }
-  const income = incomeData.get(code) ?? 0
-  const foreign = foreignData.get(code) ?? 0
-  const housing = housingData.get(code) ?? { housingRentalShare: 0, housingOwnedShare: 0, housingHouseShare: 0 }
-  const household = householdData.get(code) ?? { singlePersonShare: 0, familyWithChildrenShare: 0 }
-  return [
-    age.ageShare0_17,
-    age.ageShare18_29,
-    age.ageShare30_44,
-    age.ageShare45_64,
-    age.ageShare65plus,
-    income,
-    foreign,
-    housing.housingRentalShare,
-    housing.housingOwnedShare,
-    household.singlePersonShare,
-    household.familyWithChildrenShare,
-  ]
+const AGE_SHARE_DEFAULTS = Object.fromEntries(AGE_SHARE_FIELDS.map(field => [field, 0]))
+const HOUSEHOLD_SHARE_DEFAULTS = Object.fromEntries(HOUSEHOLD_SHARE_FIELDS.map(field => [field, 0]))
+const HOUSING_DEFAULTS = { housingRentalShare: 0, housingOwnedShare: 0, housingHouseShare: 0 }
+
+// Fields that make up the similarity vector, in fv0..fvN order. housingHouseShare is
+// deliberately excluded — the three tenure shares sum to 1, so including it would be redundant.
+const VECTOR_FIELDS = [...AGE_SHARE_FIELDS, 'meanIncome', 'foreignBackgroundShare', 'housingRentalShare', 'housingOwnedShare', ...HOUSEHOLD_SHARE_FIELDS]
+
+const namedPropertiesFor = (code) => ({
+  ...AGE_SHARE_DEFAULTS,
+  ...(ageData.get(code) ?? {}),
+  meanIncome: incomeData.get(code) ?? 0,
+  foreignBackgroundShare: foreignData.get(code) ?? 0,
+  ...HOUSING_DEFAULTS,
+  ...(housingData.get(code) ?? {}),
+  ...HOUSEHOLD_SHARE_DEFAULTS,
+  ...(householdData.get(code) ?? {}),
 })
 
-// Normalize each of the 11 dimensions independently across all DeSO areas
-const normalizedByDim = Array.from({ length: 11 }, (_, dim) =>
+const desoNamedProperties = boundaries.features.map(f => namedPropertiesFor(String(f.properties.desokod ?? '').trim()))
+
+const rawVectors = desoNamedProperties.map(named => VECTOR_FIELDS.map(field => named[field]))
+
+// Normalize each dimension independently across all DeSO areas
+const normalizedByDim = Array.from({ length: VECTOR_FIELDS.length }, (_, dim) =>
   minMaxNormalize(rawVectors.map(v => v[dim])),
 )
 
@@ -317,11 +342,8 @@ const features = boundaries.features.map((f, idx) => {
     if (unmatched <= 5) console.log(`  WARN no demographic data for "${code}"`)
   }
 
-  const age = ageData.get(code) ?? { ageShare0_17: 0, ageShare18_29: 0, ageShare30_44: 0, ageShare45_64: 0, ageShare65plus: 0, total: 0 }
-  const income = incomeData.get(code) ?? 0
-  const foreign = foreignData.get(code) ?? 0
-  const housing = housingData.get(code) ?? { housingRentalShare: 0, housingOwnedShare: 0, housingHouseShare: 0 }
-  const household = householdData.get(code) ?? { singlePersonShare: 0, familyWithChildrenShare: 0 }
+  const named = desoNamedProperties[idx]
+  const fvEntries = Object.fromEntries(VECTOR_FIELDS.map((_, dim) => [`fv${dim}`, normalizedByDim[dim][idx]]))
 
   return {
     type: 'Feature',
@@ -332,29 +354,8 @@ const features = boundaries.features.map((f, idx) => {
     properties: {
       samsCode: code,
       samsName: regsoNames.get(String(f.properties.regsokod ?? '').trim()) ?? code,
-      medianIncome: income,
-      foreignBackgroundShare: foreign,
-      ageShare0_17: age.ageShare0_17,
-      ageShare18_29: age.ageShare18_29,
-      ageShare30_44: age.ageShare30_44,
-      ageShare45_64: age.ageShare45_64,
-      ageShare65plus: age.ageShare65plus,
-      housingRentalShare: housing.housingRentalShare,
-      housingOwnedShare: housing.housingOwnedShare,
-      housingHouseShare: housing.housingHouseShare,
-      singlePersonShare: household.singlePersonShare,
-      familyWithChildrenShare: household.familyWithChildrenShare,
-      fv0: normalizedByDim[0][idx],
-      fv1: normalizedByDim[1][idx],
-      fv2: normalizedByDim[2][idx],
-      fv3: normalizedByDim[3][idx],
-      fv4: normalizedByDim[4][idx],
-      fv5: normalizedByDim[5][idx],
-      fv6: normalizedByDim[6][idx],
-      fv7: normalizedByDim[7][idx],
-      fv8: normalizedByDim[8][idx],
-      fv9: normalizedByDim[9][idx],
-      fv10: normalizedByDim[10][idx],
+      ...named,
+      ...fvEntries,
     },
   }
 })

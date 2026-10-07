@@ -6,27 +6,46 @@ import {
   magnitude,
   parseVector,
   rankBySimilarity,
+  VECTOR_LENGTH,
   type DemographicVector,
   type StatisticalAreaProperties,
 } from './statisticalArea'
 
-const vec = (...args: number[]): DemographicVector => args as unknown as DemographicVector
+const vec = (...args: number[]): DemographicVector => {
+  const padded = Array.from({ length: VECTOR_LENGTH }, (_, i) => args[i] ?? 0)
+  return padded as unknown as DemographicVector
+}
 
 const makeArea = (code: string, ...fv: number[]): StatisticalAreaProperties => ({
   samsCode: code,
   samsName: `Area ${code}`,
-  medianIncome: 0,
+  meanIncome: 0,
   foreignBackgroundShare: 0,
-  ageShare0_17: 0,
-  ageShare18_29: 0,
-  ageShare30_44: 0,
-  ageShare45_64: 0,
-  ageShare65plus: 0,
+  ageShare00_04: 0,
+  ageShare05_09: 0,
+  ageShare10_14: 0,
+  ageShare15_19: 0,
+  ageShare20_24: 0,
+  ageShare25_29: 0,
+  ageShare30_34: 0,
+  ageShare35_39: 0,
+  ageShare40_44: 0,
+  ageShare45_49: 0,
+  ageShare50_54: 0,
+  ageShare55_59: 0,
+  ageShare60_64: 0,
+  ageShare65_69: 0,
+  ageShare70_74: 0,
+  ageShare75_79: 0,
+  ageShare80Plus: 0,
   housingRentalShare: 0,
   housingOwnedShare: 0,
   housingHouseShare: 0,
+  coupleWithChildrenShare: 0,
+  coupleWithoutChildrenShare: 0,
+  singleParentShare: 0,
   singlePersonShare: 0,
-  familyWithChildrenShare: 0,
+  otherHouseholdShare: 0,
   fv0: fv[0] ?? 0,
   fv1: fv[1] ?? 0,
   fv2: fv[2] ?? 0,
@@ -38,25 +57,40 @@ const makeArea = (code: string, ...fv: number[]): StatisticalAreaProperties => (
   fv8: fv[8] ?? 0,
   fv9: fv[9] ?? 0,
   fv10: fv[10] ?? 0,
+  fv11: fv[11] ?? 0,
+  fv12: fv[12] ?? 0,
+  fv13: fv[13] ?? 0,
+  fv14: fv[14] ?? 0,
+  fv15: fv[15] ?? 0,
+  fv16: fv[16] ?? 0,
+  fv17: fv[17] ?? 0,
+  fv18: fv[18] ?? 0,
+  fv19: fv[19] ?? 0,
+  fv20: fv[20] ?? 0,
+  fv21: fv[21] ?? 0,
+  fv22: fv[22] ?? 0,
+  fv23: fv[23] ?? 0,
+  fv24: fv[24] ?? 0,
+  fv25: fv[25] ?? 0,
 })
 
 describe('dotProduct', () => {
   it('is zero for orthogonal vectors', () => {
-    expect(dotProduct(vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0))).toBe(0)
+    expect(dotProduct(vec(1), vec(0, 1))).toBe(0)
   })
 
   it('computes the sum of element-wise products', () => {
-    expect(dotProduct(vec(1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0))).toBe(11)
+    expect(dotProduct(vec(1, 2), vec(3, 4))).toBe(11)
   })
 })
 
 describe('magnitude', () => {
   it('returns the Euclidean length', () => {
-    expect(magnitude(vec(3, 4, 0, 0, 0, 0, 0, 0, 0, 0, 0))).toBeCloseTo(5)
+    expect(magnitude(vec(3, 4))).toBeCloseTo(5)
   })
 
   it('returns 0 for the zero vector', () => {
-    expect(magnitude(vec(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0))).toBe(0)
+    expect(magnitude(vec())).toBe(0)
   })
 })
 
@@ -67,18 +101,12 @@ describe('cosineSimilarity', () => {
   })
 
   it('returns 0 for orthogonal vectors', () => {
-    expect(
-      cosineSimilarity(vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)),
-    ).toBe(0)
+    expect(cosineSimilarity(vec(1), vec(0, 1))).toBe(0)
   })
 
   it('returns 0 when either vector is zero', () => {
-    expect(
-      cosineSimilarity(vec(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)),
-    ).toBe(0)
-    expect(
-      cosineSimilarity(vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)),
-    ).toBe(0)
+    expect(cosineSimilarity(vec(), vec(1))).toBe(0)
+    expect(cosineSimilarity(vec(1), vec())).toBe(0)
   })
 
   it('is commutative', () => {
@@ -103,7 +131,9 @@ describe('euclideanSimilarity', () => {
   })
 
   it('returns 0 for maximally different vectors', () => {
-    expect(euclideanSimilarity(vec(0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), vec(1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1))).toBeCloseTo(0)
+    const zero = vec()
+    const one = Array.from({ length: VECTOR_LENGTH }, () => 1) as unknown as DemographicVector
+    expect(euclideanSimilarity(zero, one)).toBeCloseTo(0)
   })
 
   it('is symmetric', () => {
@@ -121,17 +151,18 @@ describe('euclideanSimilarity', () => {
   })
 
   it('scores a closer area higher than a farther one', () => {
-    const base  = vec(0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+    const base = Array.from({ length: VECTOR_LENGTH }, () => 0.5) as unknown as DemographicVector
     const close = vec(0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
-    const far   = vec(0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
+    const far = vec(0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
     expect(euclideanSimilarity(base, close)).toBeGreaterThan(euclideanSimilarity(base, far))
   })
 })
 
 describe('parseVector', () => {
-  it('returns Right for a valid record with 11 finite numbers', () => {
-    const raw = { fv0: 0.1, fv1: 0.2, fv2: 0.3, fv3: 0.1, fv4: 0.1, fv5: 0.5, fv6: 0.2, fv7: 0.6, fv8: 0.2, fv9: 0.4, fv10: 0.3 }
-    expect(parseVector(raw).isRight()).toBe(true)
+  const validRaw = Object.fromEntries(Array.from({ length: VECTOR_LENGTH }, (_, i) => [`fv${i}`, i / VECTOR_LENGTH]))
+
+  it(`returns Right for a valid record with ${VECTOR_LENGTH} finite numbers`, () => {
+    expect(parseVector(validRaw).isRight()).toBe(true)
   })
 
   it('returns Left when a component is missing', () => {
@@ -142,43 +173,39 @@ describe('parseVector', () => {
   })
 
   it('returns Left when a component is not a number', () => {
-    const raw = { fv0: 'bad', fv1: 0.2, fv2: 0.3, fv3: 0.1, fv4: 0.1, fv5: 0.5, fv6: 0.2, fv7: 0.6, fv8: 0.2, fv9: 0.4, fv10: 0.3 }
-    expect(parseVector(raw).isLeft()).toBe(true)
+    const result = parseVector({ ...validRaw, fv0: 'bad' })
+    expect(result.isLeft()).toBe(true)
   })
 
   it('returns Left when a component is NaN', () => {
-    const raw = { fv0: NaN, fv1: 0.2, fv2: 0.3, fv3: 0.1, fv4: 0.1, fv5: 0.5, fv6: 0.2, fv7: 0.6, fv8: 0.2, fv9: 0.4, fv10: 0.3 }
-    expect(parseVector(raw).isLeft()).toBe(true)
+    const result = parseVector({ ...validRaw, fv0: NaN })
+    expect(result.isLeft()).toBe(true)
   })
 })
 
 describe('rankBySimilarity', () => {
   it('excludes the selected area from results', () => {
-    const areas = [makeArea('A', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), makeArea('B', 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0)]
-    const result = rankBySimilarity('A', vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), areas)
+    const areas = [makeArea('A', 1), makeArea('B', 0, 1)]
+    const result = rankBySimilarity('A', vec(1), areas)
     expect(result.every(r => r.samsCode !== 'A')).toBe(true)
   })
 
   it('returns results sorted descending by score', () => {
-    const areas = [
-      makeArea('A', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-      makeArea('B', 0.9, 0.1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-      makeArea('C', 0, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0),
-    ]
-    const result = rankBySimilarity('X', vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), areas)
+    const areas = [makeArea('A', 1), makeArea('B', 0.9, 0.1), makeArea('C', 0, 1)]
+    const result = rankBySimilarity('X', vec(1), areas)
     for (let i = 0; i < result.length - 1; i++) {
-      expect((result[i]?.score ?? 0)).toBeGreaterThanOrEqual(result[i + 1]?.score ?? 0)
+      expect(result[i]?.score ?? 0).toBeGreaterThanOrEqual(result[i + 1]?.score ?? 0)
     }
   })
 
   it('returns an empty array when only the selected area is present', () => {
-    const areas = [makeArea('A', 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0)]
-    expect(rankBySimilarity('A', vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), areas)).toHaveLength(0)
+    const areas = [makeArea('A', 1)]
+    expect(rankBySimilarity('A', vec(1), areas)).toHaveLength(0)
   })
 
   it('returns scores in [0, 1]', () => {
-    const areas = [makeArea('B', 0.5, 0.5, 0, 0, 0, 0, 0, 0, 0, 0, 0), makeArea('C', 0, 0, 1, 0, 0, 0, 0, 0, 0, 0, 0)]
-    const result = rankBySimilarity('A', vec(1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0), areas)
+    const areas = [makeArea('B', 0.5, 0.5), makeArea('C', 0, 0, 1)]
+    const result = rankBySimilarity('A', vec(1), areas)
     result.forEach(r => {
       expect(r.score).toBeGreaterThanOrEqual(0)
       expect(r.score).toBeLessThanOrEqual(1)

@@ -3,20 +3,35 @@ import { Either, Left, Right } from 'purify-ts/Either'
 export type SamsCode = string
 
 export type DemographicVector = readonly [
-  number, // fv0: ageShare0_17
-  number, // fv1: ageShare18_29
-  number, // fv2: ageShare30_44
-  number, // fv3: ageShare45_64
-  number, // fv4: ageShare65plus
-  number, // fv5: medianIncome
-  number, // fv6: foreignBackgroundShare
-  number, // fv7: housingRentalShare
-  number, // fv8: housingOwnedShare
-  number, // fv9: singlePersonShare (ESUB households)
-  number, // fv10: familyWithChildrenShare (SBMB + ESMB households)
+  number, // fv0: ageShare00_04
+  number, // fv1: ageShare05_09
+  number, // fv2: ageShare10_14
+  number, // fv3: ageShare15_19
+  number, // fv4: ageShare20_24
+  number, // fv5: ageShare25_29
+  number, // fv6: ageShare30_34
+  number, // fv7: ageShare35_39
+  number, // fv8: ageShare40_44
+  number, // fv9: ageShare45_49
+  number, // fv10: ageShare50_54
+  number, // fv11: ageShare55_59
+  number, // fv12: ageShare60_64
+  number, // fv13: ageShare65_69
+  number, // fv14: ageShare70_74
+  number, // fv15: ageShare75_79
+  number, // fv16: ageShare80Plus
+  number, // fv17: meanIncome
+  number, // fv18: foreignBackgroundShare
+  number, // fv19: housingRentalShare
+  number, // fv20: housingOwnedShare
+  number, // fv21: coupleWithChildrenShare (SBMB households)
+  number, // fv22: coupleWithoutChildrenShare (SBUB households)
+  number, // fv23: singleParentShare (ESMB households)
+  number, // fv24: singlePersonShare (ESUB households)
+  number, // fv25: otherHouseholdShare (OVRIGA households)
 ]
 
-export const VECTOR_LENGTH = 11 as const
+export const VECTOR_LENGTH = 26 as const
 
 // Maximum possible Euclidean distance in [0,1]^VECTOR_LENGTH space: sqrt(VECTOR_LENGTH)
 const MAX_EUCLIDEAN_DISTANCE = Math.sqrt(VECTOR_LENGTH)
@@ -24,18 +39,33 @@ const MAX_EUCLIDEAN_DISTANCE = Math.sqrt(VECTOR_LENGTH)
 export type StatisticalAreaProperties = {
   readonly samsCode: SamsCode
   readonly samsName: string
-  readonly medianIncome: number
+  readonly meanIncome: number
   readonly foreignBackgroundShare: number
-  readonly ageShare0_17: number
-  readonly ageShare18_29: number
-  readonly ageShare30_44: number
-  readonly ageShare45_64: number
-  readonly ageShare65plus: number
+  readonly ageShare00_04: number
+  readonly ageShare05_09: number
+  readonly ageShare10_14: number
+  readonly ageShare15_19: number
+  readonly ageShare20_24: number
+  readonly ageShare25_29: number
+  readonly ageShare30_34: number
+  readonly ageShare35_39: number
+  readonly ageShare40_44: number
+  readonly ageShare45_49: number
+  readonly ageShare50_54: number
+  readonly ageShare55_59: number
+  readonly ageShare60_64: number
+  readonly ageShare65_69: number
+  readonly ageShare70_74: number
+  readonly ageShare75_79: number
+  readonly ageShare80Plus: number
   readonly housingRentalShare: number
   readonly housingOwnedShare: number
   readonly housingHouseShare: number
+  readonly coupleWithChildrenShare: number
+  readonly coupleWithoutChildrenShare: number
+  readonly singleParentShare: number
   readonly singlePersonShare: number
-  readonly familyWithChildrenShare: number
+  readonly otherHouseholdShare: number
   readonly fv0: number
   readonly fv1: number
   readonly fv2: number
@@ -47,6 +77,21 @@ export type StatisticalAreaProperties = {
   readonly fv8: number
   readonly fv9: number
   readonly fv10: number
+  readonly fv11: number
+  readonly fv12: number
+  readonly fv13: number
+  readonly fv14: number
+  readonly fv15: number
+  readonly fv16: number
+  readonly fv17: number
+  readonly fv18: number
+  readonly fv19: number
+  readonly fv20: number
+  readonly fv21: number
+  readonly fv22: number
+  readonly fv23: number
+  readonly fv24: number
+  readonly fv25: number
 }
 
 export type SimilarityScore = {
@@ -58,7 +103,12 @@ export type SimilarityScore = {
 export type ParseError = { readonly kind: 'ParseError'; readonly message: string }
 
 export const extractVector = (props: StatisticalAreaProperties): DemographicVector =>
-  [props.fv0, props.fv1, props.fv2, props.fv3, props.fv4, props.fv5, props.fv6, props.fv7, props.fv8, props.fv9, props.fv10]
+  [
+    props.fv0, props.fv1, props.fv2, props.fv3, props.fv4, props.fv5, props.fv6, props.fv7,
+    props.fv8, props.fv9, props.fv10, props.fv11, props.fv12, props.fv13, props.fv14, props.fv15,
+    props.fv16, props.fv17, props.fv18, props.fv19, props.fv20, props.fv21, props.fv22, props.fv23,
+    props.fv24, props.fv25,
+  ]
 
 export const dotProduct = (a: DemographicVector, b: DemographicVector): number =>
   a.reduce((sum, ai, i) => sum + ai * (b[i] ?? 0), 0)
