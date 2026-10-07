@@ -29,12 +29,30 @@ export type DemographicVector = readonly [
   number, // fv23: singleParentShare (ESMB households)
   number, // fv24: singlePersonShare (ESUB households)
   number, // fv25: otherHouseholdShare (OVRIGA households)
+  number, // fv26: educationPreSecondaryShare
+  number, // fv27: educationSecondaryShare
+  number, // fv28: educationPostSecondaryShortShare
+  number, // fv29: educationPostSecondaryLongShare
+  number, // fv30: educationUnknownShare
 ]
 
-export const VECTOR_LENGTH = 26 as const
+export const VECTOR_LENGTH = 31 as const
 
-// Maximum possible Euclidean distance in [0,1]^VECTOR_LENGTH space: sqrt(VECTOR_LENGTH)
-const MAX_EUCLIDEAN_DISTANCE = Math.sqrt(VECTOR_LENGTH)
+// Dimension groups in fv0..fv30 order: age brackets (17), mean income (1), foreign background
+// (1), housing tenure shares (2), household type shares (5), education level shares (5).
+// Weighting every raw dimension equally would let age, household type, and education - which
+// happen to be broken into many sub-dimensions - dominate the similarity score over categories
+// represented by just one or two dimensions, like income. Weighting each category equally
+// instead means a difference in income counts as much toward the score as a difference across
+// the entire age profile.
+const CATEGORY_DIMENSION_COUNTS = [17, 1, 1, 2, 5, 5] as const
+const CATEGORY_COUNT = CATEGORY_DIMENSION_COUNTS.length
+
+// Each dimension's weight is 1 / (number of categories * dimensions in its category), so every
+// category's weights sum to 1/CATEGORY_COUNT and all weights together sum to 1.
+const DIMENSION_WEIGHTS: readonly number[] = CATEGORY_DIMENSION_COUNTS.flatMap(size =>
+  Array.from({ length: size }, () => 1 / (CATEGORY_COUNT * size)),
+)
 
 export type StatisticalAreaProperties = {
   readonly samsCode: SamsCode
@@ -66,6 +84,11 @@ export type StatisticalAreaProperties = {
   readonly singleParentShare: number
   readonly singlePersonShare: number
   readonly otherHouseholdShare: number
+  readonly educationPreSecondaryShare: number
+  readonly educationSecondaryShare: number
+  readonly educationPostSecondaryShortShare: number
+  readonly educationPostSecondaryLongShare: number
+  readonly educationUnknownShare: number
   readonly fv0: number
   readonly fv1: number
   readonly fv2: number
@@ -92,6 +115,11 @@ export type StatisticalAreaProperties = {
   readonly fv23: number
   readonly fv24: number
   readonly fv25: number
+  readonly fv26: number
+  readonly fv27: number
+  readonly fv28: number
+  readonly fv29: number
+  readonly fv30: number
 }
 
 export type SimilarityScore = {
@@ -107,7 +135,7 @@ export const extractVector = (props: StatisticalAreaProperties): DemographicVect
     props.fv0, props.fv1, props.fv2, props.fv3, props.fv4, props.fv5, props.fv6, props.fv7,
     props.fv8, props.fv9, props.fv10, props.fv11, props.fv12, props.fv13, props.fv14, props.fv15,
     props.fv16, props.fv17, props.fv18, props.fv19, props.fv20, props.fv21, props.fv22, props.fv23,
-    props.fv24, props.fv25,
+    props.fv24, props.fv25, props.fv26, props.fv27, props.fv28, props.fv29, props.fv30,
   ]
 
 export const dotProduct = (a: DemographicVector, b: DemographicVector): number =>
@@ -123,11 +151,17 @@ export const cosineSimilarity = (a: DemographicVector, b: DemographicVector): nu
   return dotProduct(a, b) / (magA * magB)
 }
 
-// Euclidean similarity: 1 - distance / max_distance, giving a score in [0,1].
+// Euclidean similarity: 1 - weighted distance, giving a score in [0,1]. Dimensions are weighted
+// by category (see DIMENSION_WEIGHTS) rather than equally, so categories with many sub-dimensions
+// don't dominate categories with few. Since the weights sum to 1 and both vectors are in
+// [0,1]^VECTOR_LENGTH, the weighted squared distance is itself bounded in [0,1].
 // More discriminating than cosine on all-positive min-max-normalised vectors.
 export const euclideanSimilarity = (a: DemographicVector, b: DemographicVector): number => {
-  const dist = Math.sqrt(a.reduce((sum, ai, i) => sum + (ai - (b[i] ?? 0)) ** 2, 0))
-  return 1 - dist / MAX_EUCLIDEAN_DISTANCE
+  const weightedSquaredDistance = a.reduce(
+    (sum, ai, i) => sum + (DIMENSION_WEIGHTS[i] ?? 0) * (ai - (b[i] ?? 0)) ** 2,
+    0,
+  )
+  return 1 - Math.sqrt(weightedSquaredDistance)
 }
 
 export const parseVector = (

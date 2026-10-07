@@ -46,6 +46,11 @@ const makeArea = (code: string, ...fv: number[]): StatisticalAreaProperties => (
   singleParentShare: 0,
   singlePersonShare: 0,
   otherHouseholdShare: 0,
+  educationPreSecondaryShare: 0,
+  educationSecondaryShare: 0,
+  educationPostSecondaryShortShare: 0,
+  educationPostSecondaryLongShare: 0,
+  educationUnknownShare: 0,
   fv0: fv[0] ?? 0,
   fv1: fv[1] ?? 0,
   fv2: fv[2] ?? 0,
@@ -72,6 +77,11 @@ const makeArea = (code: string, ...fv: number[]): StatisticalAreaProperties => (
   fv23: fv[23] ?? 0,
   fv24: fv[24] ?? 0,
   fv25: fv[25] ?? 0,
+  fv26: fv[26] ?? 0,
+  fv27: fv[27] ?? 0,
+  fv28: fv[28] ?? 0,
+  fv29: fv[29] ?? 0,
+  fv30: fv[30] ?? 0,
 })
 
 describe('dotProduct', () => {
@@ -155,6 +165,26 @@ describe('euclideanSimilarity', () => {
     const close = vec(0.6, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
     const far = vec(0.9, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5, 0.5)
     expect(euclideanSimilarity(base, close)).toBeGreaterThan(euclideanSimilarity(base, far))
+  })
+
+  // Dimension groups, in fv0..fv30 order: age (fv0-16, 17 dims), income (fv17, 1 dim), foreign
+  // background (fv18, 1 dim), housing (fv19-20, 2 dims), household (fv21-25, 5 dims),
+  // education (fv26-30, 5 dims).
+  it('weighs each category equally regardless of how many dimensions it has', () => {
+    const zero = vec()
+    const differsOnlyInAge = Array.from({ length: VECTOR_LENGTH }, (_, i) => (i <= 16 ? 1 : 0)) as unknown as DemographicVector
+    const differsOnlyInIncome = Array.from({ length: VECTOR_LENGTH }, (_, i) => (i === 17 ? 1 : 0)) as unknown as DemographicVector
+    const differsOnlyInHousehold = Array.from({ length: VECTOR_LENGTH }, (_, i) => (i >= 21 && i <= 25 ? 1 : 0)) as unknown as DemographicVector
+    const differsOnlyInEducation = Array.from({ length: VECTOR_LENGTH }, (_, i) => (i >= 26 ? 1 : 0)) as unknown as DemographicVector
+
+    const ageScore = euclideanSimilarity(zero, differsOnlyInAge)
+    const incomeScore = euclideanSimilarity(zero, differsOnlyInIncome)
+    const householdScore = euclideanSimilarity(zero, differsOnlyInHousehold)
+    const educationScore = euclideanSimilarity(zero, differsOnlyInEducation)
+
+    expect(ageScore).toBeCloseTo(incomeScore)
+    expect(ageScore).toBeCloseTo(householdScore)
+    expect(ageScore).toBeCloseTo(educationScore)
   })
 })
 
