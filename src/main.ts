@@ -5,12 +5,24 @@ import type { FeatureCollection } from 'geojson'
 import { stockholmMunicipalityColors, type MunicipalityColorMap } from './domain/municipality'
 import { partyColors, type PartyCode } from './domain/election'
 import type { LayerToggle } from './domain/layerToggle'
+import {
+  parseVector,
+  rankBySimilarity,
+  type SamsCode,
+  type StatisticalAreaProperties,
+} from './domain/statisticalArea'
 import { fetchStockholmMunicipalities } from './infrastructure/municipalities'
 import { fetchVotingDistricts, votingDistrictYears, type VotingDistrictYear } from './infrastructure/votingDistricts'
+import {
+  fetchStatisticalAreas,
+  type StatisticalAreaFeatureCollection,
+} from './infrastructure/statisticalAreas'
 import { MapControlsPanel } from './interface/mapControlsPanel'
 import { buildPartyLegend } from './interface/partyLegend'
+import { buildSimilarityPanel, updateSimilarityPanel } from './interface/similarityPanel'
 import './interface/mapControlsPanel.css'
 import './interface/partyLegend.css'
+import './interface/similarityPanel.css'
 
 const buildMunicipalityColorExpression = (colors: MunicipalityColorMap): ExpressionSpecification =>
   [
@@ -39,6 +51,13 @@ const votingDistrictsToggle: LayerToggle = {
   id: 'voting-districts',
   label: 'Voting districts',
   layerIds: ['voting-districts-fill', 'voting-districts-border'],
+  defaultVisibility: 'none',
+}
+
+const statisticalAreasToggle: LayerToggle = {
+  id: 'statistical-areas',
+  label: 'Demographic similarity',
+  layerIds: ['statistical-areas-fill', 'statistical-areas-border'],
   defaultVisibility: 'none',
 }
 
@@ -109,7 +128,41 @@ const buildVotingDistrictsSubPanel = (): HTMLElement => {
   return panel
 }
 
-const subPanels = new Map([[votingDistrictsToggle.id, buildVotingDistrictsSubPanel()]])
+const similarityPanel = buildSimilarityPanel()
+
+const applySimilarityScores = (
+  source: GeoJSONSource,
+  base: StatisticalAreaFeatureCollection,
+  scores: ReadonlyMap<SamsCode, number>,
+  selectedCode: SamsCode | null,
+  topMatchCode: SamsCode | null,
+): void => {
+  const updated = {
+    ...base,
+    features: base.features.map(f => {
+      const code = f.properties.samsCode
+      const score = scores.get(code) ?? 0
+      const displayCategory =
+        code === selectedCode
+          ? 'selected'
+          : selectedCode === null
+            ? 'neutral'
+            : code === topMatchCode
+              ? 'topMatch'
+              : 'top10'
+      return {
+        ...f,
+        properties: { ...f.properties, similarityScore: score, displayCategory },
+      }
+    }),
+  }
+  source.setData(updated as unknown as FeatureCollection)
+}
+
+const subPanels = new Map([
+  [votingDistrictsToggle.id, buildVotingDistrictsSubPanel()],
+  [statisticalAreasToggle.id, similarityPanel],
+])
 
 const disclaimer = document.createElement('p')
 disclaimer.className = 'map-controls-panel__disclaimer'
@@ -117,7 +170,12 @@ disclaimer.textContent =
   'Boundaries and results may be incomplete or contain errors — please verify anything important elsewhere. No responsibility is taken for mistakes. This is a personal side project, made for fun.'
 
 map.addControl(
-  new MapControlsPanel([municipalitiesToggle, votingDistrictsToggle], subPanels, 'radio', disclaimer),
+  new MapControlsPanel(
+    [municipalitiesToggle, votingDistrictsToggle, statisticalAreasToggle],
+    subPanels,
+    'radio',
+    disclaimer,
+  ),
   'top-right',
 )
 
@@ -215,6 +273,133 @@ map.on('load', () => {
           map.on('mouseleave', 'voting-districts-fill', () => {
             map.getCanvas().style.cursor = ''
             tooltip.remove()
+          })
+        },
+      }),
+    )
+
+  void fetchStatisticalAreas()
+    .run()
+    .then(result =>
+      result.caseOf({
+        Left: err => console.error(`[statistical-areas] ${err.message}`),
+        Right: geojson => {
+          map.addSource('statistical-areas', {
+            type: 'geojson',
+            data: geojson as unknown as FeatureCollection,
+            promoteId: 'samsCode',
+          })
+
+          map.addLayer({
+            id: 'statistical-areas-fill',
+            type: 'fill',
+            source: 'statistical-areas',
+            layout: { visibility: statisticalAreasToggle.defaultVisibility },
+            paint: {
+              'fill-color': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'selected'],
+                '#f59e0b',
+                ['any', ['==', ['get', 'displayCategory'], 'top10'], ['==', ['get', 'displayCategory'], 'topMatch']],
+                [
+                  'interpolate',
+                  ['linear'],
+                  ['get', 'similarityScore'],
+                  0.0,
+                  '#bfdbfe',
+                  0.5,
+                  '#3b82f6',
+                  1.0,
+                  '#1d4ed8',
+                ],
+                '#94a3b8',
+              ] as unknown as ExpressionSpecification,
+              'fill-opacity': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'selected'],
+                0.9,
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                0.85,
+                ['==', ['get', 'displayCategory'], 'top10'],
+                0.7,
+                0.2,
+              ] as unknown as ExpressionSpecification,
+            },
+          })
+
+          map.addLayer({
+            id: 'statistical-areas-border',
+            type: 'line',
+            source: 'statistical-areas',
+            layout: { visibility: statisticalAreasToggle.defaultVisibility },
+            paint: {
+              // The most similar area gets the same amber outline as the selected area, so the
+              // single best match is identifiable at a glance against the rest of the blue gradient.
+              'line-color': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                '#f59e0b',
+                '#ffffff',
+              ] as unknown as ExpressionSpecification,
+              'line-width': [
+                'case',
+                ['==', ['get', 'displayCategory'], 'topMatch'],
+                2,
+                0.5,
+              ] as unknown as ExpressionSpecification,
+            },
+          })
+
+          map.on('mousemove', 'statistical-areas-fill', e => {
+            const name = e.features?.[0]?.properties?.samsName as string | undefined
+            if (!name) return
+            map.getCanvas().style.cursor = 'pointer'
+            tooltip.setLngLat(e.lngLat).setText(name).addTo(map)
+          })
+          map.on('mouseleave', 'statistical-areas-fill', () => {
+            map.getCanvas().style.cursor = ''
+            tooltip.remove()
+          })
+
+          // The only state that changes after load is which area is selected; it is scoped to
+          // this layer's click handler rather than held at module level.
+          let selectedSamsCode: SamsCode | null = null
+
+          map.on('click', 'statistical-areas-fill', e => {
+            const props = e.features?.[0]?.properties as
+              | (Record<string, unknown> & StatisticalAreaProperties)
+              | undefined
+            if (!props) return
+
+            const clickedCode = props.samsCode
+            const source = map.getSource('statistical-areas') as GeoJSONSource
+
+            if (clickedCode === selectedSamsCode) {
+              selectedSamsCode = null
+              applySimilarityScores(source, geojson, new Map(), null, null)
+              updateSimilarityPanel(similarityPanel, null, null)
+              return
+            }
+
+            selectedSamsCode = clickedCode
+
+            parseVector(props).caseOf({
+              Left: err => console.error(`[statistical-areas] ${err.message}`),
+              Right: vector => {
+                const allProps = geojson.features.map(f => f.properties)
+                const ranked = rankBySimilarity(clickedCode, vector, allProps)
+                const minScore = ranked[ranked.length - 1]?.score ?? 0
+                const maxScore = ranked[0]?.score ?? 1
+                const range = maxScore - minScore
+                const rescale = (s: number): number => (range === 0 ? 1 : (s - minScore) / range)
+                const rescaledRanked = ranked.map(r => ({ samsCode: r.samsCode, samsName: r.samsName, rawScore: r.score, score: rescale(r.score) }))
+                const scoreMap = new Map(rescaledRanked.map(r => [r.samsCode, r.score] as const))
+                scoreMap.set(clickedCode, 1.0)
+                const topMatchCode = rescaledRanked[0]?.samsCode ?? null
+                applySimilarityScores(source, geojson, scoreMap, clickedCode, topMatchCode)
+                updateSimilarityPanel(similarityPanel, props.samsName, rescaledRanked.slice(0, 10))
+              },
+            })
           })
         },
       }),

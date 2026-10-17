@@ -13,6 +13,7 @@ upgraded across a license boundary (see the "Dependency Licensing" rule in `CLAU
 | `@emnapi/core` | 1.11.3 | MIT | Permissive. Free for production and commercial use. |
 | `@emnapi/runtime` | 1.11.3 | MIT | Permissive. Free for production and commercial use. |
 | `fflate` | 0.8.3 | MIT | Permissive. Free for production and commercial use. |
+| `jsdom` | 29.1.1 | MIT | Permissive. Dev-only — DOM environment for unit-testing `src/interface/` rendering logic. |
 | `proj4` | 2.22.0 | MIT | Permissive. Free for production and commercial use. |
 | `read-excel-file` | 9.3.10 | MIT | Permissive. Free for production and commercial use. |
 | `shapefile` | 0.6.6 | BSD-3-Clause | Permissive. Free for production and commercial use. |
@@ -77,6 +78,30 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
   national-security concerns (§4.2) — no formal SLA. Terms can change unilaterally for minor
   updates; major changes require re-acceptance (§5). Low risk here since this is an occasional
   build-time regeneration, not live production traffic.
+
+### Demographic statistics & RegSO boundaries — SCB (Statistics Sweden)
+- **What:** Pre-processed at build time by `scripts/buildStatisticalAreas.mjs` into
+  `public/statistical-areas.geojson`; bundled as a static asset. `src/infrastructure/statisticalAreas.ts`
+  fetches the local file, same pattern as `municipalities.ts`/`votingDistricts.ts` — no runtime call
+  to SCB. Two SCB services are used: the GeoServer WFS (`geodata.scb.se/geoserver/stat/wfs`, layer
+  `stat:RegSO_2025`) for official RegSO boundaries and names, and the PxWeb API
+  (`api.scb.se/OV0104/v1/doris`) for demographic tables (age, income, foreign background, housing
+  tenure, household type, education level) — queried directly with RegSO codes, since these tables
+  support both DeSO and RegSO granularity.
+- **Terms:** SCB's open data (both the geodata WFS/WMS services and the PxWeb statistical database)
+  is licensed **CC0 1.0 Universal** — public domain, no attribution required, explicitly free for
+  commercial and production use. No API key or registration needed for either service.
+  Sources: https://www.scb.se/en/services/open-data-api/ and
+  https://www.scb.se/en/services/open-data-api/open-geodata/open-data-for-deso--demographic-statistical-areas/
+- **Obligation:** None required by the license. SCB asks that if you cite a source at all, you use
+  "Source: Statistics Sweden" — but explicitly says *not* to cite them as the source once the data
+  has been processed (which it has been here: reprojected, joined, normalized), so no attribution
+  is surfaced in the map's attribution control.
+- **Rate limits:** PxWeb caps requests at 10 calls per 10 seconds per IP and 100,000 values per
+  table query (HTTP 403 if exceeded). `buildStatisticalAreas.mjs` issues 6 parallel PxWeb POSTs
+  per run, comfortably under the limit. This is a build-time-only concern — there is no runtime
+  traffic to SCB, so production usage can never trigger it.
+- **Regenerating the data:** run `node scripts/buildStatisticalAreas.mjs`. No credentials needed.
 
 ### Voting district results — Valmyndigheten (Swedish Election Authority)
 - **What:** Pre-processed at build time into `public/voting-districts-*.geojson` (see comment in
