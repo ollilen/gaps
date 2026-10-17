@@ -19,6 +19,27 @@ The codebase follows functional programming and Domain-Driven Design principles:
 | Done | **Stockholm municipalities** — all municipalities in Stockholm county rendered as a fill layer with hover tooltips |
 | Done | **Voting districts colored by party** — overlay voting districts (valdistrikt) colored by dominant party for riksdag elections 2010–2022; party legend, year selector, and hover tooltips |
 | Done | **Demographic similarity** — click a RegSO area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 10 matches with relative similarity scores |
+| Planned | **Travel time** — see how far public transport gets you from a location, or how long it takes to reach a chosen destination |
+
+## Ideas & upcoming features
+
+### 1. Demographic similarity — click an area, find its twins
+
+Status: done — see Features and Data sources.
+
+Click on a smaller area (city district / statistical area level — think Hagsätra/Rågsved or Kista) and the map highlights other areas across Stockholm that have the most similar demographic profile.
+
+Sketch:
+- Source data: SCB publishes demographic statistics at statistical area (SAMS-område) level (age, income, foreign background, housing type, etc.)
+- On click, compute a similarity score between the selected area and all others (e.g. cosine similarity or Euclidean distance over normalized features)
+- Highlight the top N most similar areas with a gradient fill; de-emphasize the rest
+- A side panel lists the matched areas with the key shared characteristics
+
+### 2. Travel time — how far can you get by public transport?
+
+Two branches:
+- **Reachable area:** click a location, address, or DeSO area and highlight the surrounding area reachable from it within an hour by public transport
+- **Time to destination:** enter a destination in an input field, then click a location, address, or DeSO area to see the public transport travel time to that destination
 
 ## Data sources
 
