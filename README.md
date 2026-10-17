@@ -23,19 +23,7 @@ The codebase follows functional programming and Domain-Driven Design principles:
 
 ## Ideas & upcoming features
 
-### 1. Demographic similarity — click an area, find its twins
-
-Status: done — see Features and Data sources.
-
-Click on a smaller area (city district / statistical area level — think Hagsätra/Rågsved or Kista) and the map highlights other areas across Stockholm that have the most similar demographic profile.
-
-Sketch:
-- Source data: SCB publishes demographic statistics at statistical area (SAMS-område) level (age, income, foreign background, housing type, etc.)
-- On click, compute a similarity score between the selected area and all others (e.g. cosine similarity or Euclidean distance over normalized features)
-- Highlight the top N most similar areas with a gradient fill; de-emphasize the rest
-- A side panel lists the matched areas with the key shared characteristics
-
-### 2. Travel time — how far can you get by public transport?
+### 1. Travel time — how far can you get by public transport?
 
 Two branches:
 - **Reachable area:** click a location, address, or DeSO area and highlight the surrounding area reachable from it within an hour by public transport
