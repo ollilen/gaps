@@ -11,8 +11,8 @@
  * 0180) has 127 RegSO areas.
  *
  * Data sources:
- *   Boundaries: SCB GeoServer WFS — stat:RegSO_2020 (SWEREF99TM, reprojected to WGS84)
- *   Demographics: SCB PxWeb API v1 (json-stat2), DeSO/RegSO-level tables queried with RegSO codes
+ *   Boundaries: SCB GeoServer WFS — stat:RegSO_2025 (SWEREF99TM, reprojected to WGS84)
+ *   Demographics: SCB PxWeb API v1 (json-stat2), DeSO/RegSO-level tables queried with RegSO 2025 codes
  *
  * Run: node scripts/buildStatisticalAreas.mjs
  */
@@ -27,9 +27,14 @@ const PUBLIC_DIR = join(__dirname, '..', 'public')
 const OUT_PATH = join(PUBLIC_DIR, 'statistical-areas.geojson')
 
 const STOCKHOLM_KOM = '0180'
-// DeSO 2018 codes were retired when DeSO 2025 launched in 2024; use 2023 data throughout.
-const YEAR = '2023'
-const HOUSING_YEAR = '2023'
+// 2024 is the latest year every source table covers: the income table (Tab2InkDesoRegso) stops
+// there, while the population tables already have 2025. Data from 2024 onward is published only
+// for the RegSO 2025 area division, so boundaries and all six tables must use RegSO 2025.
+const YEAR = '2024'
+
+// PxWeb tables that carry both area divisions suffix RegSO 2025 codes (e.g. 0180R001_RegSO2025);
+// the WFS layer and the published GeoJSON use the bare code.
+const toPxWebRegion = (regsoCode) => `${regsoCode}_RegSO2025`
 
 // SWEREF99 TM (EPSG:3006) → WGS84
 proj4.defs('SWEREF99TM', '+proj=utm +zone=33 +ellps=GRS80 +towgs84=0,0,0,0,0,0,0 +units=m +no_defs')
@@ -48,11 +53,11 @@ const fetchBoundaries = async () => {
   const url =
     'https://geodata.scb.se/geoserver/stat/wfs' +
     '?service=WFS&version=2.0.0&request=GetFeature' +
-    '&typeNames=stat:RegSO_2020' +
+    '&typeNames=stat:RegSO_2025' +
     '&outputFormat=application/json' +
     `&CQL_FILTER=kommunkod='${STOCKHOLM_KOM}'`
 
-  process.stdout.write(`  WFS RegSO_2020 (Stockholm stad) ... `)
+  process.stdout.write(`  WFS RegSO_2025 (Stockholm stad) ... `)
   const res = await fetch(url)
   if (!res.ok) throw new Error(`HTTP ${res.status}: ${url}`)
   const geojson = await res.json()
@@ -132,7 +137,7 @@ const AGE_SHARE_FIELDS = Object.values(AGE_BRACKET_FIELDS)
 
 const fetchAgeDistribution = async (regsoCodes) => {
   const dataset = await scbPost('BE/BE0101/BE0101Y/FolkmDesoAldKon', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'Alder', selection: { filter: 'item', values: ['totalt', ...AGE_BRACKETS] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y7'] } },
@@ -141,11 +146,11 @@ const fetchAgeDistribution = async (regsoCodes) => {
 
   const result = new Map()
   for (const code of regsoCodes) {
-    const total = readValue(dataset, { Region: code, Alder: 'totalt', Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
+    const total = readValue(dataset, { Region: toPxWebRegion(code), Alder: 'totalt', Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
     const denom = total > 0 ? total : 1
     const shares = {}
     for (const bracket of AGE_BRACKETS) {
-      const count = readValue(dataset, { Region: code, Alder: bracket, Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
+      const count = readValue(dataset, { Region: toPxWebRegion(code), Alder: bracket, Kon: '1+2', ContentsCode: '000007Y7', Tid: YEAR }) ?? 0
       shares[AGE_BRACKET_FIELDS[bracket]] = count / denom
     }
     result.set(code, shares)
@@ -157,7 +162,7 @@ const fetchMeanNetIncome = async (regsoCodes) => {
   // Tab2InkDesoRegso: income structure by DeSO/RegSO
   // Inkomstkomponenter 240 = nettoinkomst, ContentsCode 000008A4 = mean for all (tkr)
   const dataset = await scbPost('HE/HE0110/HE0110I/Tab2InkDesoRegso', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'Inkomstkomponenter', selection: { filter: 'item', values: ['240'] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000008A4'] } },
@@ -166,7 +171,7 @@ const fetchMeanNetIncome = async (regsoCodes) => {
 
   const result = new Map()
   for (const code of regsoCodes) {
-    const val = readValue(dataset, { Region: code, Inkomstkomponenter: '240', Kon: '1+2', ContentsCode: '000008A4', Tid: YEAR })
+    const val = readValue(dataset, { Region: toPxWebRegion(code), Inkomstkomponenter: '240', Kon: '1+2', ContentsCode: '000008A4', Tid: YEAR })
     // Value is in thousands SEK; store as actual SEK for normalization clarity
     result.set(code, (val ?? 0) * 1000)
   }
@@ -177,7 +182,7 @@ const fetchForeignBackground = async (regsoCodes) => {
   // FolkmDesoBakgrKon: UtlBakgrund values: '2'=Swedish bg, '1'=foreign bg, 'SA'=total
   // Request only foreign ('1') and total ('SA') to compute the share efficiently.
   const dataset = await scbPost('BE/BE0101/BE0101Y/FolkmDesoBakgrKon', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'UtlBakgrund', selection: { filter: 'item', values: ['1', 'SA'] } },
     { code: 'Kon', selection: { filter: 'item', values: ['1+2'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y4'] } },
@@ -186,8 +191,8 @@ const fetchForeignBackground = async (regsoCodes) => {
 
   const result = new Map()
   for (const code of regsoCodes) {
-    const foreign = readValue(dataset, { Region: code, UtlBakgrund: '1', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
-    const total = readValue(dataset, { Region: code, UtlBakgrund: 'SA', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
+    const foreign = readValue(dataset, { Region: toPxWebRegion(code), UtlBakgrund: '1', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
+    const total = readValue(dataset, { Region: toPxWebRegion(code), UtlBakgrund: 'SA', Kon: '1+2', ContentsCode: '000007Y4', Tid: YEAR }) ?? 0
     result.set(code, total > 0 ? foreign / total : 0)
   }
   return result
@@ -208,7 +213,7 @@ const HOUSEHOLD_SHARE_FIELDS = Object.values(HOUSEHOLD_CATEGORY_FIELDS)
 
 const fetchHouseholdTypes = async (regsoCodes) => {
   const dataset = await scbPost('BE/BE0101/BE0101Y/HushallDesoTyp', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'Hushallstyp', selection: { filter: 'item', values: [...HOUSEHOLD_CATEGORIES, 'TOTALT'] } },
     { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Y1'] } },
     { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
@@ -216,11 +221,11 @@ const fetchHouseholdTypes = async (regsoCodes) => {
 
   const result = new Map()
   for (const code of regsoCodes) {
-    const total = readValue(dataset, { Region: code, Hushallstyp: 'TOTALT', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
+    const total = readValue(dataset, { Region: toPxWebRegion(code), Hushallstyp: 'TOTALT', ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
     const denom = total > 0 ? total : 1
     const shares = {}
     for (const category of HOUSEHOLD_CATEGORIES) {
-      const count = readValue(dataset, { Region: code, Hushallstyp: category, ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
+      const count = readValue(dataset, { Region: toPxWebRegion(code), Hushallstyp: category, ContentsCode: '000007Y1', Tid: YEAR }) ?? 0
       shares[HOUSEHOLD_CATEGORY_FIELDS[category]] = count / denom
     }
     result.set(code, shares)
@@ -228,7 +233,7 @@ const fetchHouseholdTypes = async (regsoCodes) => {
   return result
 }
 
-// UtbSUNBefDesoRegso covers only population aged 25-64 (not the whole population, unlike the
+// UtbSUNBefDesoRegsoN covers only population aged 25-65 (not the whole population, unlike the
 // other demographic tables) and has no separate TOTALT code — these 5 levels exhaustively
 // partition that population, so their sum is the denominator.
 const EDUCATION_CATEGORY_FIELDS = {
@@ -242,17 +247,17 @@ const EDUCATION_CATEGORIES = Object.keys(EDUCATION_CATEGORY_FIELDS)
 const EDUCATION_SHARE_FIELDS = Object.values(EDUCATION_CATEGORY_FIELDS)
 
 const fetchEducationLevels = async (regsoCodes) => {
-  const dataset = await scbPost('UF/UF0506/UF0506D/UtbSUNBefDesoRegso', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+  const dataset = await scbPost('UF/UF0506/UF0506D/UtbSUNBefDesoRegsoN', [
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'UtbildningsNiva', selection: { filter: 'item', values: EDUCATION_CATEGORIES } },
-    { code: 'ContentsCode', selection: { filter: 'item', values: ['000005MO'] } },
+    { code: 'ContentsCode', selection: { filter: 'item', values: ['000007Z6'] } },
     { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
   ])
 
   const result = new Map()
   for (const code of regsoCodes) {
     const counts = EDUCATION_CATEGORIES.map(
-      category => readValue(dataset, { Region: code, UtbildningsNiva: category, ContentsCode: '000005MO', Tid: YEAR }) ?? 0,
+      category => readValue(dataset, { Region: toPxWebRegion(code), UtbildningsNiva: category, ContentsCode: '000007Z6', Tid: YEAR }) ?? 0,
     )
     const total = counts.reduce((sum, count) => sum + count, 0)
     const denom = total > 0 ? total : 1
@@ -266,20 +271,20 @@ const fetchEducationLevels = async (regsoCodes) => {
 }
 
 const fetchHousingTenure = async (regsoCodes) => {
-  // BO0104T10N: housing by tenure, queried at RegSO level
+  // BO0104T01N2: housing by tenure, queried at RegSO 2025 level
   // Upplatelseform: 1=hyresrätt(rental), 2=bostadsrätt(co-op owned), 3=äganderätt(house/owned)
-  const dataset = await scbPost('BO/BO0104/BO0104D/BO0104T10N', [
-    { code: 'Region', selection: { filter: 'item', values: regsoCodes } },
+  const dataset = await scbPost('BO/BO0104/BO0104D/BO0104T01N2', [
+    { code: 'Region', selection: { filter: 'item', values: regsoCodes.map(toPxWebRegion) } },
     { code: 'Upplatelseform', selection: { filter: 'item', values: ['1', '2', '3'] } },
-    { code: 'ContentsCode', selection: { filter: 'item', values: ['000006OC'] } },
-    { code: 'Tid', selection: { filter: 'item', values: [HOUSING_YEAR] } },
+    { code: 'ContentsCode', selection: { filter: 'item', values: ['00000864'] } },
+    { code: 'Tid', selection: { filter: 'item', values: [YEAR] } },
   ])
 
   const result = new Map()
   for (const code of regsoCodes) {
-    const rental = readValue(dataset, { Region: code, Upplatelseform: '1', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
-    const owned = readValue(dataset, { Region: code, Upplatelseform: '2', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
-    const house = readValue(dataset, { Region: code, Upplatelseform: '3', ContentsCode: '000006OC', Tid: HOUSING_YEAR }) ?? 0
+    const rental = readValue(dataset, { Region: toPxWebRegion(code), Upplatelseform: '1', ContentsCode: '00000864', Tid: YEAR }) ?? 0
+    const owned = readValue(dataset, { Region: toPxWebRegion(code), Upplatelseform: '2', ContentsCode: '00000864', Tid: YEAR }) ?? 0
+    const house = readValue(dataset, { Region: toPxWebRegion(code), Upplatelseform: '3', ContentsCode: '00000864', Tid: YEAR }) ?? 0
     const total = rental + owned + house
     result.set(code, {
       housingRentalShare: total > 0 ? rental / total : 0,
@@ -303,7 +308,7 @@ const minMaxNormalize = (values) => {
 
 // ── Main ─────────────────────────────────────────────────────────────────────
 
-console.log('\n=== Building statistical-areas.geojson (RegSO 2020) ===\n')
+console.log('\n=== Building statistical-areas.geojson (RegSO 2025) ===\n')
 
 console.log('1. Fetching RegSO boundaries...')
 const boundaries = await fetchBoundaries()

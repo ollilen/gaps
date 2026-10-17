@@ -84,7 +84,7 @@ node -pe "require('./node_modules/<pkg>/package.json').license"
   `public/statistical-areas.geojson`; bundled as a static asset. `src/infrastructure/statisticalAreas.ts`
   fetches the local file, same pattern as `municipalities.ts`/`votingDistricts.ts` — no runtime call
   to SCB. Two SCB services are used: the GeoServer WFS (`geodata.scb.se/geoserver/stat/wfs`, layer
-  `stat:RegSO_2020`) for official RegSO boundaries and names, and the PxWeb API
+  `stat:RegSO_2025`) for official RegSO boundaries and names, and the PxWeb API
   (`api.scb.se/OV0104/v1/doris`) for demographic tables (age, income, foreign background, housing
   tenure, household type, education level) — queried directly with RegSO codes, since these tables
   support both DeSO and RegSO granularity.
