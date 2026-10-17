@@ -19,15 +19,13 @@ The codebase follows functional programming and Domain-Driven Design principles:
 | Done | **Stockholm municipalities** — all municipalities in Stockholm county rendered as a fill layer with hover tooltips |
 | Done | **Voting districts colored by party** — overlay voting districts (valdistrikt) colored by dominant party for riksdag elections 2010–2022; party legend, year selector, and hover tooltips |
 | Done | **Demographic similarity** — click a RegSO area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 10 matches with their similarity as a percentage |
-| Planned | **Travel time** — see how far public transport gets you from a location, or how long it takes to reach a chosen destination |
+| Done | **Travel time** — click a DeSO area to see which areas public transport reaches within an hour, or see the travel time from every area to a fixed destination (Södersjukhuset); median weekday morning trips, precomputed from the SL timetable |
 
 ## Ideas & upcoming features
 
-### 1. Travel time — how far can you get by public transport?
+### 1. Travel time to any address
 
-Two branches:
-- **Reachable area:** click a location, address, or DeSO area and highlight the surrounding area reachable from it within an hour by public transport
-- **Time to destination:** enter a destination in an input field, then click a location, address, or DeSO area to see the public transport travel time to that destination
+Let the user type in any address as the destination, instead of the fixed destinations precomputed in `scripts/travelTimeDestinations.json`. Needs a geocoder whose license allows production use, and either routing in the browser (minotor can run client-side) or a new precomputed column per address.
 
 ## Data sources
 
@@ -105,6 +103,20 @@ Similarity between two areas is the Euclidean similarity in this 31-dimensional 
 
 Script: `scripts/buildStatisticalAreas.mjs`
 
+#### Trafiklab GTFS Regional — `opendata.samtrafiken.se`
+
+The SL timetable (GTFS, CC0) plus SCB's `stat:DeSO_2025` boundaries produce precomputed public transport travel times between the 569 DeSO areas in Stockholm stad, and from each DeSO to the fixed destinations in `scripts/travelTimeDestinations.json`.
+
+| Output | Contents |
+|--------|----------|
+| `public/deso-areas.geojson` | DeSO polygons with their RegSO name and matrix index |
+| `public/travel-times.bin` | Origin × destination matrix of minutes (one byte per pair; 255 = unreachable) |
+| `public/travel-time-destinations.json` | Minutes from every DeSO to each fixed destination |
+
+Method: each travel time is the **median** door-to-door time over departures every 5 minutes between 07:30 and 08:30 on a weekday (the next Tuesday by default). Door to door means walking from the origin area's starting point to any stop within 1 km, riding with up to 5 transfers, and walking from a stop within 1 km to the destination point — or walking the whole way when that's faster. Walking time is straight-line distance × 1.3 at 5 km/h. An area's starting point is the average position of the stops inside it rather than its geometric centre, since DeSO boundaries along the shore extend into the water and their centres can land in a lake; areas without stops use a point inside the polygon. Routing uses [minotor](https://github.com/aubryio/minotor) (RAPTOR).
+
+Script: `scripts/buildTravelTimes.ts` (needs `TRAFIKLAB_API_KEY` in `.env`)
+
 ---
 
 ## Development
@@ -135,4 +147,7 @@ node scripts/generate-voting-districts.mjs
 
 # Demographic similarity data — queries SCB WFS and PxWeb APIs
 node scripts/buildStatisticalAreas.mjs
+
+# Travel times — downloads the SL timetable from Trafiklab and queries SCB WFS (~10+ min)
+node --env-file=.env scripts/buildTravelTimes.ts
 ```

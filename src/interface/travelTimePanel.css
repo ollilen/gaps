@@ -1,0 +1,48 @@
+.travel-time-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.travel-time-panel__mode-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+}
+
+.travel-time-panel__status {
+  margin: 2px 0 0;
+  font-size: 11px;
+  color: #555;
+  max-width: 200px;
+  line-height: 1.4;
+}
+
+.travel-time-panel__legend {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin-top: 2px;
+}
+
+.travel-time-panel__legend-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.travel-time-panel__legend-swatch {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  border: 1px solid rgba(0, 0, 0, 0.15);
+  flex-shrink: 0;
+}
+
+.travel-time-panel__legend-label {
+  color: #333;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
