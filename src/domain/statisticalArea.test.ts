@@ -3,6 +3,7 @@ import {
   cosineSimilarity,
   euclideanSimilarity,
   dotProduct,
+  extractVector,
   magnitude,
   parseVector,
   rankBySimilarity,
@@ -51,37 +52,7 @@ const makeArea = (code: string, ...fv: number[]): StatisticalAreaProperties => (
   educationPostSecondaryShortShare: 0,
   educationPostSecondaryLongShare: 0,
   educationUnknownShare: 0,
-  fv0: fv[0] ?? 0,
-  fv1: fv[1] ?? 0,
-  fv2: fv[2] ?? 0,
-  fv3: fv[3] ?? 0,
-  fv4: fv[4] ?? 0,
-  fv5: fv[5] ?? 0,
-  fv6: fv[6] ?? 0,
-  fv7: fv[7] ?? 0,
-  fv8: fv[8] ?? 0,
-  fv9: fv[9] ?? 0,
-  fv10: fv[10] ?? 0,
-  fv11: fv[11] ?? 0,
-  fv12: fv[12] ?? 0,
-  fv13: fv[13] ?? 0,
-  fv14: fv[14] ?? 0,
-  fv15: fv[15] ?? 0,
-  fv16: fv[16] ?? 0,
-  fv17: fv[17] ?? 0,
-  fv18: fv[18] ?? 0,
-  fv19: fv[19] ?? 0,
-  fv20: fv[20] ?? 0,
-  fv21: fv[21] ?? 0,
-  fv22: fv[22] ?? 0,
-  fv23: fv[23] ?? 0,
-  fv24: fv[24] ?? 0,
-  fv25: fv[25] ?? 0,
-  fv26: fv[26] ?? 0,
-  fv27: fv[27] ?? 0,
-  fv28: fv[28] ?? 0,
-  fv29: fv[29] ?? 0,
-  fv30: fv[30] ?? 0,
+  ...Object.fromEntries(Array.from({ length: VECTOR_LENGTH }, (_, i) => [`fv${i}`, fv[i] ?? 0])),
 })
 
 describe('dotProduct', () => {
@@ -185,6 +156,13 @@ describe('euclideanSimilarity', () => {
     expect(ageScore).toBeCloseTo(incomeScore)
     expect(ageScore).toBeCloseTo(householdScore)
     expect(ageScore).toBeCloseTo(educationScore)
+  })
+})
+
+describe('extractVector', () => {
+  it(`reads fv0..fv${VECTOR_LENGTH - 1} in order`, () => {
+    const components = Array.from({ length: VECTOR_LENGTH }, (_, i) => i / VECTOR_LENGTH)
+    expect(extractVector(makeArea('A', ...components))).toEqual(components)
   })
 })
 
