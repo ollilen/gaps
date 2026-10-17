@@ -3,8 +3,7 @@ import type { SamsCode } from '../domain/statisticalArea'
 export type SimilarityPanelEntry = {
   readonly samsCode: SamsCode
   readonly samsName: string
-  readonly score: number // rescaled 0-1 relative to this click's spread, shown as a percentage
-  readonly rawScore: number // Euclidean similarity 0-1, shown alongside the percentage
+  readonly score: number
 }
 
 export const buildSimilarityPanel = (): HTMLElement => {
@@ -62,14 +61,9 @@ export const updateSimilarityPanel = (
     pct.className = 'similarity-panel__score'
     pct.textContent = `${Math.round(score.score * 100)}%`
 
-    const raw = document.createElement('span')
-    raw.className = 'similarity-panel__raw-score'
-    raw.textContent = score.rawScore.toFixed(2)
-
     item.appendChild(rank)
     item.appendChild(name)
     item.appendChild(pct)
-    item.appendChild(raw)
     list.appendChild(item)
   })
 

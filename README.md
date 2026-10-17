@@ -18,7 +18,7 @@ The codebase follows functional programming and Domain-Driven Design principles:
 |--------|---------|
 | Done | **Stockholm municipalities** — all municipalities in Stockholm county rendered as a fill layer with hover tooltips |
 | Done | **Voting districts colored by party** — overlay voting districts (valdistrikt) colored by dominant party for riksdag elections 2010–2022; party legend, year selector, and hover tooltips |
-| Done | **Demographic similarity** — click a RegSO area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 10 matches with relative similarity scores |
+| Done | **Demographic similarity** — click a RegSO area and highlight other areas across Stockholm with the most similar demographic profile; side panel lists the top 10 matches with their similarity as a percentage |
 | Planned | **Travel time** — see how far public transport gets you from a location, or how long it takes to reach a chosen destination |
 
 ## Ideas & upcoming features
