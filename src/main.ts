@@ -392,12 +392,13 @@ map.on('load', () => {
                 const maxScore = ranked[0]?.score ?? 1
                 const range = maxScore - minScore
                 const rescale = (s: number): number => (range === 0 ? 1 : (s - minScore) / range)
-                const rescaledRanked = ranked.map(r => ({ samsCode: r.samsCode, samsName: r.samsName, rawScore: r.score, score: rescale(r.score) }))
-                const scoreMap = new Map(rescaledRanked.map(r => [r.samsCode, r.score] as const))
+                // Only the map colouring is stretched across this click's spread, so the top
+                // matches don't all render as the same shade; the panel shows the score itself.
+                const scoreMap = new Map(ranked.map(r => [r.samsCode, rescale(r.score)] as const))
                 scoreMap.set(clickedCode, 1.0)
-                const topMatchCode = rescaledRanked[0]?.samsCode ?? null
+                const topMatchCode = ranked[0]?.samsCode ?? null
                 applySimilarityScores(source, geojson, scoreMap, clickedCode, topMatchCode)
-                updateSimilarityPanel(similarityPanel, props.samsName, rescaledRanked.slice(0, 10))
+                updateSimilarityPanel(similarityPanel, props.samsName, ranked.slice(0, 10))
               },
             })
           })
