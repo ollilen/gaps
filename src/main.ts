@@ -128,9 +128,6 @@ const buildVotingDistrictsSubPanel = (): HTMLElement => {
   return panel
 }
 
-let statisticalAreasCollection: StatisticalAreaFeatureCollection | null = null
-let selectedSamsCode: SamsCode | null = null
-
 const similarityPanel = buildSimilarityPanel()
 
 const applySimilarityScores = (
@@ -287,8 +284,6 @@ map.on('load', () => {
       result.caseOf({
         Left: err => console.error(`[statistical-areas] ${err.message}`),
         Right: geojson => {
-          statisticalAreasCollection = geojson
-
           map.addSource('statistical-areas', {
             type: 'geojson',
             data: geojson as unknown as FeatureCollection,
@@ -366,18 +361,22 @@ map.on('load', () => {
             tooltip.remove()
           })
 
+          // The only state that changes after load is which area is selected; it is scoped to
+          // this layer's click handler rather than held at module level.
+          let selectedSamsCode: SamsCode | null = null
+
           map.on('click', 'statistical-areas-fill', e => {
             const props = e.features?.[0]?.properties as
               | (Record<string, unknown> & StatisticalAreaProperties)
               | undefined
-            if (!props || !statisticalAreasCollection) return
+            if (!props) return
 
             const clickedCode = props.samsCode
             const source = map.getSource('statistical-areas') as GeoJSONSource
 
             if (clickedCode === selectedSamsCode) {
               selectedSamsCode = null
-              applySimilarityScores(source, statisticalAreasCollection, new Map(), null, null)
+              applySimilarityScores(source, geojson, new Map(), null, null)
               updateSimilarityPanel(similarityPanel, null, null)
               return
             }
@@ -387,8 +386,7 @@ map.on('load', () => {
             parseVector(props).caseOf({
               Left: err => console.error(`[statistical-areas] ${err.message}`),
               Right: vector => {
-                if (!statisticalAreasCollection) return
-                const allProps = statisticalAreasCollection.features.map(f => f.properties)
+                const allProps = geojson.features.map(f => f.properties)
                 const ranked = rankBySimilarity(clickedCode, vector, allProps)
                 const minScore = ranked[ranked.length - 1]?.score ?? 0
                 const maxScore = ranked[0]?.score ?? 1
@@ -398,7 +396,7 @@ map.on('load', () => {
                 const scoreMap = new Map(rescaledRanked.map(r => [r.samsCode, r.score] as const))
                 scoreMap.set(clickedCode, 1.0)
                 const topMatchCode = rescaledRanked[0]?.samsCode ?? null
-                applySimilarityScores(source, statisticalAreasCollection, scoreMap, clickedCode, topMatchCode)
+                applySimilarityScores(source, geojson, scoreMap, clickedCode, topMatchCode)
                 updateSimilarityPanel(similarityPanel, props.samsName, rescaledRanked.slice(0, 10))
               },
             })
