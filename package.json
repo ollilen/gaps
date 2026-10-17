@@ -19,6 +19,7 @@
     "@emnapi/runtime": "^1.11.3",
     "fflate": "^0.8.3",
     "jsdom": "^29.1.1",
+    "minotor": "^11.5.0",
     "proj4": "^2.22.0",
     "read-excel-file": "^9.3.10",
     "shapefile": "^0.6.6",
