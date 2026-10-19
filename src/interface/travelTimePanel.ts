@@ -68,11 +68,13 @@ const buildLegend = (): HTMLElement => {
 export const buildTravelTimePanel = (
   options: readonly TravelTimeModeOption[],
   onSelect: (id: string) => void,
+  selectedId?: string,
 ): HTMLElement => {
   const panel = document.createElement('div')
   panel.className = 'travel-time-panel'
 
-  options.forEach((option, i) => panel.appendChild(buildModeRow(option, i === 0, onSelect)))
+  const checkedId = options.find(o => o.id === selectedId)?.id ?? options[0]?.id
+  options.forEach(option => panel.appendChild(buildModeRow(option, option.id === checkedId, onSelect)))
 
   const status = document.createElement('p')
   status.className = 'travel-time-panel__status'
