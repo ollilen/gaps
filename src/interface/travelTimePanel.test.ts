@@ -19,6 +19,18 @@ describe('buildTravelTimePanel', () => {
     ])
   })
 
+  it('preselects the given mode', () => {
+    const panel = buildTravelTimePanel(options, vi.fn(), 'sodersjukhuset')
+    const radios = [...panel.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(radios.map(r => r.checked)).toEqual([false, true])
+  })
+
+  it('falls back to the first mode when the given one is not offered', () => {
+    const panel = buildTravelTimePanel(options, vi.fn(), 'unknown')
+    const radios = [...panel.querySelectorAll<HTMLInputElement>('input[type="radio"]')]
+    expect(radios.map(r => r.checked)).toEqual([true, false])
+  })
+
   it('reports the chosen mode when the selection changes', () => {
     const onSelect = vi.fn()
     const panel = buildTravelTimePanel(options, onSelect)

@@ -63,14 +63,14 @@ const travelTimeToggle: LayerToggle = {
   id: 'travel-time',
   label: 'Travel time (public transport)',
   layerIds: ['travel-time-fill', 'travel-time-border', 'travel-time-destination'],
-  defaultVisibility: 'none',
+  defaultVisibility: 'visible',
 }
 
 const municipalitiesToggle: LayerToggle = {
   id: 'municipalities',
   label: 'Municipalities',
   layerIds: ['municipalities-fill', 'municipalities-border'],
-  defaultVisibility: 'visible',
+  defaultVisibility: 'none',
 }
 
 const votingDistrictsToggle: LayerToggle = {
@@ -223,6 +223,7 @@ const travelTimeColorExpression = (): ExpressionSpecification =>
   ] as unknown as ExpressionSpecification
 
 const REACHABLE_MODE_ID = 'reachable'
+const DEFAULT_MODE_ID = 'sodersjukhuset'
 
 const setUpTravelTime = (
   areas: DesoAreaFeatureCollection,
@@ -287,7 +288,12 @@ const setUpTravelTime = (
 
   // Which mode is shown and which area is the origin are the only state that changes after
   // load; both are scoped to this set-up rather than held at module level.
-  let mode: TravelTimeMode = { kind: 'reachable' }
+  const modeFor = (id: string): TravelTimeMode =>
+    Maybe.fromNullable(destinations.find(d => d.id === id))
+      .map<TravelTimeMode>(destination => ({ kind: 'toDestination', destination }))
+      .orDefault({ kind: 'reachable' })
+
+  let mode: TravelTimeMode = modeFor(DEFAULT_MODE_ID)
   let origin: Maybe<number> = Nothing
 
   const statusText = (): string => {
@@ -315,9 +321,7 @@ const setUpTravelTime = (
   }
 
   const selectMode = (id: string): void => {
-    mode = Maybe.fromNullable(destinations.find(d => d.id === id))
-      .map<TravelTimeMode>(destination => ({ kind: 'toDestination', destination }))
-      .orDefault({ kind: 'reachable' })
+    mode = modeFor(id)
     render()
   }
 
@@ -327,6 +331,7 @@ const setUpTravelTime = (
       ...destinations.map(d => ({ id: d.id, label: `Time to ${d.label}` })),
     ],
     selectMode,
+    mode.kind === 'toDestination' ? mode.destination.id : REACHABLE_MODE_ID,
   )
   travelTimeSubPanel.replaceChildren(panel)
 
