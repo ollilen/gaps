@@ -1,4 +1,5 @@
 import { EitherAsync } from 'purify-ts/EitherAsync'
+import { assetUrl } from './publicAssetUrl'
 import { Left } from 'purify-ts/Either'
 import type { StatisticalAreaProperties } from '../domain/statisticalArea'
 
@@ -22,7 +23,7 @@ type FetchError = { readonly kind: 'FetchError'; readonly message: string }
 // Pre-processed at build time; bundled as a static asset.
 export const fetchStatisticalAreas = (): EitherAsync<FetchError, StatisticalAreaFeatureCollection> =>
   EitherAsync(async ({ liftEither }) => {
-    const res = await fetch('/statistical-areas.geojson')
+    const res = await fetch(assetUrl('statistical-areas.geojson'))
     if (!res.ok) {
       return liftEither(
         Left<FetchError, StatisticalAreaFeatureCollection>({

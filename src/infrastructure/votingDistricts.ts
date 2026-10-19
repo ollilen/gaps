@@ -1,4 +1,5 @@
 import { EitherAsync } from 'purify-ts/EitherAsync'
+import { assetUrl } from './publicAssetUrl'
 import { Left } from 'purify-ts/Either'
 import type { PartyCode } from '../domain/election'
 
@@ -31,7 +32,7 @@ type FetchError = { readonly kind: 'FetchError'; readonly message: string }
 // Pre-processed from XLSX + boundary JSON at build time; bundled as a static asset.
 export const fetchVotingDistricts = (year: VotingDistrictYear): EitherAsync<FetchError, VotingDistrictFeatureCollection> =>
   EitherAsync(async ({ liftEither }) => {
-    const res = await fetch(`/voting-districts-${year}.geojson`)
+    const res = await fetch(assetUrl(`voting-districts-${year}.geojson`))
     if (!res.ok) {
       return liftEither(
         Left<FetchError, VotingDistrictFeatureCollection>({

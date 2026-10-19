@@ -1,4 +1,5 @@
 import { EitherAsync } from 'purify-ts/EitherAsync'
+import { assetUrl } from './publicAssetUrl'
 import { decodeTravelTimeMatrix, type TravelTimeMatrix } from '../domain/travelTime'
 import { parseFixedDestinations, type FixedDestination } from '../domain/fixedDestination'
 
@@ -35,10 +36,10 @@ const fetchOk = (path: string, what: string): EitherAsync<FetchError, Response> 
 // by scripts/buildTravelTimes.ts and bundled as static assets — see docs/DEPENDENCIES.md for why
 // this isn't a live routing API.
 export const fetchDesoAreas = (): EitherAsync<FetchError, DesoAreaFeatureCollection> =>
-  fetchOk('/deso-areas.geojson', 'DeSO areas').map(res => res.json() as Promise<DesoAreaFeatureCollection>)
+  fetchOk(assetUrl('deso-areas.geojson'), 'DeSO areas').map(res => res.json() as Promise<DesoAreaFeatureCollection>)
 
 export const fetchTravelTimeMatrix = (): EitherAsync<FetchError, TravelTimeMatrix> =>
-  fetchOk('/travel-times.bin', 'travel times').chain(res =>
+  fetchOk(assetUrl('travel-times.bin'), 'travel times').chain(res =>
     EitherAsync(async ({ liftEither }) =>
       liftEither(
         decodeTravelTimeMatrix(new Uint8Array(await res.arrayBuffer())).mapLeft(error => fetchError(error.message)),
@@ -47,7 +48,7 @@ export const fetchTravelTimeMatrix = (): EitherAsync<FetchError, TravelTimeMatri
   )
 
 export const fetchFixedDestinations = (): EitherAsync<FetchError, readonly FixedDestination[]> =>
-  fetchOk('/travel-time-destinations.json', 'travel time destinations').chain(res =>
+  fetchOk(assetUrl('travel-time-destinations.json'), 'travel time destinations').chain(res =>
     EitherAsync(async ({ liftEither }) =>
       liftEither(parseFixedDestinations(await res.json()).mapLeft(error => fetchError(error.message))),
     ),
