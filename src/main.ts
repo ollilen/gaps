@@ -1,4 +1,11 @@
-import { Map as MapLibreMap, Popup, setWorkerUrl, type ExpressionSpecification, type GeoJSONSource } from 'maplibre-gl'
+import {
+  Map as MapLibreMap,
+  Popup,
+  setWorkerUrl,
+  type ExpressionSpecification,
+  type FilterSpecification,
+  type GeoJSONSource,
+} from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import mapLibreWorkerUrl from 'maplibre-gl/dist/maplibre-gl-worker.mjs?worker&url'
 import type { FeatureCollection } from 'geojson'
@@ -17,12 +24,24 @@ import {
   fetchStatisticalAreas,
   type StatisticalAreaFeatureCollection,
 } from './infrastructure/statisticalAreas'
+import { Just, Maybe, Nothing } from 'purify-ts/Maybe'
+import { reachableFrom, type TravelTimeMatrix } from './domain/travelTime'
+import type { FixedDestination } from './domain/fixedDestination'
+import { areaCategory, minutesByArea, REACH_LIMIT_MINUTES, type TravelTimeMode } from './domain/travelTimeView'
+import {
+  fetchDesoAreas,
+  fetchFixedDestinations,
+  fetchTravelTimeMatrix,
+  type DesoAreaFeatureCollection,
+} from './infrastructure/travelTimes'
 import { MapControlsPanel } from './interface/mapControlsPanel'
 import { buildPartyLegend } from './interface/partyLegend'
 import { buildSimilarityPanel, updateSimilarityPanel } from './interface/similarityPanel'
+import { buildTravelTimePanel, travelTimeCategoryColors, updateTravelTimeStatus } from './interface/travelTimePanel'
 import './interface/mapControlsPanel.css'
 import './interface/partyLegend.css'
 import './interface/similarityPanel.css'
+import './interface/travelTimePanel.css'
 
 const buildMunicipalityColorExpression = (colors: MunicipalityColorMap): ExpressionSpecification =>
   [
@@ -39,6 +58,13 @@ const buildPartyColorExpression = (): ExpressionSpecification =>
     ...Object.entries(partyColors).flatMap(([code, color]) => [code, color]),
     '#999999',
   ] as unknown as ExpressionSpecification
+
+const travelTimeToggle: LayerToggle = {
+  id: 'travel-time',
+  label: 'Travel time (public transport)',
+  layerIds: ['travel-time-fill', 'travel-time-border', 'travel-time-destination'],
+  defaultVisibility: 'none',
+}
 
 const municipalitiesToggle: LayerToggle = {
   id: 'municipalities',
@@ -159,7 +185,14 @@ const applySimilarityScores = (
   source.setData(updated as unknown as FeatureCollection)
 }
 
+// Filled in once the travel time data has loaded: the mode options depend on which fixed
+// destinations were precomputed, but the controls panel has to exist before the map loads.
+const travelTimeSubPanel = document.createElement('div')
+travelTimeSubPanel.className = 'map-controls-panel__sub-panel'
+travelTimeSubPanel.textContent = 'Loading…'
+
 const subPanels = new Map([
+  [travelTimeToggle.id, travelTimeSubPanel],
   [votingDistrictsToggle.id, buildVotingDistrictsSubPanel()],
   [statisticalAreasToggle.id, similarityPanel],
 ])
@@ -171,7 +204,7 @@ disclaimer.textContent =
 
 map.addControl(
   new MapControlsPanel(
-    [municipalitiesToggle, votingDistrictsToggle, statisticalAreasToggle],
+    [travelTimeToggle, municipalitiesToggle, votingDistrictsToggle, statisticalAreasToggle],
     subPanels,
     'radio',
     disclaimer,
@@ -181,7 +214,160 @@ map.addControl(
 
 const tooltip = new Popup({ closeButton: false, closeOnClick: false })
 
+const travelTimeColorExpression = (): ExpressionSpecification =>
+  [
+    'match',
+    ['coalesce', ['feature-state', 'category'], 'outside'],
+    ...Object.entries(travelTimeCategoryColors).flatMap(([category, color]) => [category, color]),
+    travelTimeCategoryColors.outside,
+  ] as unknown as ExpressionSpecification
+
+const REACHABLE_MODE_ID = 'reachable'
+
+const setUpTravelTime = (
+  areas: DesoAreaFeatureCollection,
+  matrix: TravelTimeMatrix,
+  destinations: readonly FixedDestination[],
+): void => {
+  const regsoNames = new Map(areas.features.map(f => [f.properties.matrixIndex, f.properties.regsoName] as const))
+
+  map.addSource('travel-time-areas', {
+    type: 'geojson',
+    data: areas as unknown as FeatureCollection,
+    promoteId: 'matrixIndex',
+    attribution: 'Timetable: Trafiklab/Samtrafiken',
+  })
+  map.addSource('travel-time-destinations', {
+    type: 'geojson',
+    data: {
+      type: 'FeatureCollection',
+      features: destinations.map(d => ({
+        type: 'Feature',
+        geometry: { type: 'Point', coordinates: [d.coordinate.lng, d.coordinate.lat] },
+        properties: { id: d.id, label: d.label },
+      })),
+    },
+  })
+
+  map.addLayer({
+    id: 'travel-time-fill',
+    type: 'fill',
+    source: 'travel-time-areas',
+    layout: { visibility: travelTimeToggle.defaultVisibility },
+    paint: {
+      'fill-color': travelTimeColorExpression(),
+      'fill-opacity': [
+        'case',
+        ['==', ['coalesce', ['feature-state', 'category'], 'outside'], 'outside'],
+        0.15,
+        0.7,
+      ] as unknown as ExpressionSpecification,
+    },
+  })
+  map.addLayer({
+    id: 'travel-time-border',
+    type: 'line',
+    source: 'travel-time-areas',
+    layout: { visibility: travelTimeToggle.defaultVisibility },
+    paint: { 'line-color': '#ffffff', 'line-width': 0.4 },
+  })
+  map.addLayer({
+    id: 'travel-time-destination',
+    type: 'circle',
+    source: 'travel-time-destinations',
+    layout: { visibility: travelTimeToggle.defaultVisibility },
+    filter: ['==', ['get', 'id'], ''],
+    paint: {
+      'circle-radius': 7,
+      'circle-color': '#f59e0b',
+      'circle-stroke-color': '#ffffff',
+      'circle-stroke-width': 2,
+    },
+  })
+
+  // Which mode is shown and which area is the origin are the only state that changes after
+  // load; both are scoped to this set-up rather than held at module level.
+  let mode: TravelTimeMode = { kind: 'reachable' }
+  let origin: Maybe<number> = Nothing
+
+  const statusText = (): string => {
+    if (mode.kind === 'toDestination') {
+      return `Median weekday morning trip (07:30–08:30) to ${mode.destination.label}`
+    }
+    return origin
+      .map(from => {
+        const count = reachableFrom(matrix, from, REACH_LIMIT_MINUTES).length
+        return `${regsoNames.get(from) ?? 'Selected area'}: ${count} of ${matrix.size - 1} areas within 1 h`
+      })
+      .orDefault('Click an area to see how far you get in an hour')
+  }
+
+  const render = (): void => {
+    minutesByArea(matrix, mode, origin).forEach((minutes, index) => {
+      map.setFeatureState(
+        { source: 'travel-time-areas', id: index },
+        { category: areaCategory(mode, index, origin, minutes), minutes: minutes.extractNullable() },
+      )
+    })
+    const destinationId = mode.kind === 'toDestination' ? mode.destination.id : ''
+    map.setFilter('travel-time-destination', ['==', ['get', 'id'], destinationId] as FilterSpecification)
+    updateTravelTimeStatus(panel, statusText())
+  }
+
+  const selectMode = (id: string): void => {
+    mode = Maybe.fromNullable(destinations.find(d => d.id === id))
+      .map<TravelTimeMode>(destination => ({ kind: 'toDestination', destination }))
+      .orDefault({ kind: 'reachable' })
+    render()
+  }
+
+  const panel = buildTravelTimePanel(
+    [
+      { id: REACHABLE_MODE_ID, label: 'Reachable within 1 h from a clicked area' },
+      ...destinations.map(d => ({ id: d.id, label: `Time to ${d.label}` })),
+    ],
+    selectMode,
+  )
+  travelTimeSubPanel.replaceChildren(panel)
+
+  map.on('mousemove', 'travel-time-fill', e => {
+    const id = e.features?.[0]?.id
+    if (typeof id !== 'number') return
+    const minutes = Maybe.fromNullable(map.getFeatureState({ source: 'travel-time-areas', id })['minutes'] as number | null)
+    const showsMinutes = mode.kind === 'toDestination' || origin.isJust()
+    const detail = showsMinutes ? minutes.map(m => ` · ${m} min`).orDefault(' · no connection') : ''
+    map.getCanvas().style.cursor = 'pointer'
+    tooltip.setLngLat(e.lngLat).setText(`${regsoNames.get(id) ?? ''}${detail}`).addTo(map)
+  })
+  map.on('mouseleave', 'travel-time-fill', () => {
+    map.getCanvas().style.cursor = ''
+    tooltip.remove()
+  })
+
+  map.on('click', 'travel-time-fill', e => {
+    const id = e.features?.[0]?.id
+    if (mode.kind !== 'reachable' || typeof id !== 'number') return
+    origin = origin.extract() === id ? Nothing : Just(id)
+    render()
+  })
+
+  render()
+}
+
 map.on('load', () => {
+  void Promise.all([fetchDesoAreas().run(), fetchTravelTimeMatrix().run(), fetchFixedDestinations().run()]).then(
+    ([areas, matrix, destinations]) =>
+      areas
+        .chain(a => matrix.chain(m => destinations.map(d => [a, m, d] as const)))
+        .caseOf({
+          Left: err => {
+            console.error(`[travel-time] ${err.message}`)
+            travelTimeSubPanel.textContent = 'Travel times could not be loaded'
+          },
+          Right: ([a, m, d]) => setUpTravelTime(a, m, d),
+        }),
+  )
+
   void fetchStockholmMunicipalities()
     .run()
     .then(result =>
