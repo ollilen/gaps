@@ -1,4 +1,5 @@
 import { EitherAsync } from 'purify-ts/EitherAsync'
+import { assetUrl } from './publicAssetUrl'
 import { Left } from 'purify-ts/Either'
 
 type Geometry = {
@@ -28,7 +29,7 @@ export type FetchError = { readonly kind: 'FetchError'; readonly message: string
 // attribution control in src/main.ts) and why this is a static asset rather than a live API call.
 export const fetchStockholmMunicipalities = (): EitherAsync<FetchError, MunicipalityFeatureCollection> =>
   EitherAsync(async ({ liftEither }) => {
-    const res = await fetch('/municipalities.geojson')
+    const res = await fetch(assetUrl('municipalities.geojson'))
     if (!res.ok) {
       return liftEither(
         Left<FetchError, MunicipalityFeatureCollection>({
